@@ -66,3 +66,28 @@ export async function addFinanceEntry(form:FormData){
  await supabase.from('financial_entries').insert({company_id:companyId,created_by:user.id,entry_type,status:'unverified',amount_minor:Math.round(amount*100),currency,description});
  redirect('/workspace/finance');
 }
+
+export async function createApprovalRequest(form:FormData){
+ const {supabase,user,companyId}=await context();
+ const actionType=String(form.get('action_type')??'').trim(),title=String(form.get('title')??'').trim(),summary=String(form.get('summary')??'').trim();
+ if(!actionType||!title||!summary)redirect('/workspace/approvals?error=Complete%20all%20approval%20request%20fields');
+ await supabase.from('approval_requests').insert({company_id:companyId,requested_by:user.id,action_type:actionType,title,summary,payload:{requestedFrom:'workspace'},status:'pending'});
+ redirect('/workspace/approvals');
+}
+export async function verifyFinanceEntry(form:FormData){
+ const {supabase,companyId,role,user}=await context();
+ if(!['owner','admin'].includes(role))redirect('/workspace/finance?error=Only%20owners%20and%20admins%20can%20verify%20entries');
+ const id=String(form.get('id')??'');if(!id)return;
+ await supabase.from('financial_entries').update({status:'verified'}).eq('id',id).eq('company_id',companyId).eq('status','unverified');
+ await supabase.from('activity_events').insert({company_id:companyId,actor_id:user.id,event_type:'finance_entry_verified',summary:'A financial entry was marked verified.'});
+ redirect('/workspace/finance');
+}
+export async function addLead(form:FormData){
+ const {supabase,user,companyId}=await context();
+ const name=String(form.get('name')??'').trim(),website=String(form.get('website')??'').trim(),city=String(form.get('city')??'').trim(),country=String(form.get('country')??'').trim(),email=String(form.get('email')??'').trim();
+ if(name.length<2)redirect('/workspace/crm?error=Business%20name%20is%20required');
+ const {data:business,error}=await supabase.from('businesses').insert({company_id:companyId,name,website:website||null,city:city||null,country:country||null,email:email||null,source:'manual'}).select('id').single();
+ if(error||!business)redirect('/workspace/crm?error=Could%20not%20save%20business');
+ await supabase.from('leads').insert({company_id:companyId,business_id:business.id,created_by:user.id,status:'NEW',score:0,score_label:'LOW'});
+ redirect('/workspace/crm');
+}
