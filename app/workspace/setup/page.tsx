@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import {redirect} from 'next/navigation';
 import {createSupabaseServerClient} from '../../../src/auth/supabase-server';
 import {createCompany} from '../actions';
