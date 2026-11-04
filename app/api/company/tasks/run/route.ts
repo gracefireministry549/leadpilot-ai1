@@ -13,7 +13,7 @@ export async function POST(request:Request){
  const {data:task,error:insertError}=await s.from('company_tasks').insert({company_id:membership.company_id,employee_id:employee?.id??null,created_by:user.id,title,instructions,status:'running',started_at:new Date().toISOString()}).select('id').single();
  if(insertError||!task)return NextResponse.json({error:'Could not create task.'},{status:500});
  try{
-  const result=await runAgent({accountId:user.id},{agent:agent as any,query:instructions?title+'\n\n'+instructions:title,limit:20});
+  const result=await runAgent({accountId:membership.company_id},{agent:agent as any,query:instructions?title+'\n\n'+instructions:title,limit:20});
   const payload='body' in (result as any)?(result as any).body:result;
   const {error:updateError}=await s.from('company_tasks').update({status:'succeeded',result:payload,completed_at:new Date().toISOString()}).eq('id',task.id).eq('company_id',membership.company_id);
   await s.from('research_reports').insert({company_id:membership.company_id,created_by:user.id,agent_key:agent,title,summary:typeof (payload as any)?.message==='string'?(payload as any).message:'Agent task completed. Review the structured findings and source evidence.',findings:Array.isArray((payload as any)?.results)?(payload as any).results:[],evidence:Array.isArray((payload as any)?.evidence)?(payload as any).evidence:[],confidence:null});
