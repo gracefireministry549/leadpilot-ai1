@@ -5,11 +5,12 @@ import { runAgent } from '../../../../src/agents/runtime';
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const user = await getSupabaseAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const agent = typeof body.agent === 'string' ? body.agent : 'lead-finder';
   const query = typeof body.query === 'string' ? body.query.trim() : '';
   if (!query) return NextResponse.json({ error: 'Enter what you want the agent to find.' }, { status: 400 });
 
-  const result = await runAgent(user ? { accountId: user.id } : null, {
+  const result = await runAgent({ accountId: user.id }, {
     agent, query,
     location: typeof body.location === 'string' ? body.location : undefined,
     city: typeof body.city === 'string' ? body.city : undefined,
