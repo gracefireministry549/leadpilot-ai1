@@ -86,9 +86,9 @@ export async function addLead(form:FormData){
  const {supabase,user,companyId}=await context();
  const name=String(form.get('name')??'').trim(),website=String(form.get('website')??'').trim(),city=String(form.get('city')??'').trim(),country=String(form.get('country')??'').trim(),email=String(form.get('email')??'').trim();
  if(name.length<2)redirect('/workspace/crm?error=Business%20name%20is%20required');
- const {data:business,error}=await supabase.from('businesses').insert({company_id:companyId,name,website:website||null,city:city||null,country:country||null,email:email||null,source:'manual'}).select('id').single();
+ const {data:business,error}=await supabase.from('businesses').insert({company_id:companyId,account_id:companyId,name,website:website||null,city:city||null,country:country||null,email:email||null,source:'manual'}).select('id').single();
  if(error||!business)redirect('/workspace/crm?error=Could%20not%20save%20business');
- await supabase.from('leads').insert({company_id:companyId,business_id:business.id,created_by:user.id,status:'NEW',score:0,score_label:'LOW'});
+ await supabase.from('leads').insert({company_id:companyId,account_id:companyId,business_id:business.id,created_by:user.id,status:'NEW',score:0,score_label:'LOW'});
  redirect('/workspace/crm');
 }
 
