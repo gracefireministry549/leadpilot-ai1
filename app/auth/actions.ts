@@ -1,7 +1,7 @@
 'use server';
 import {redirect} from 'next/navigation';
 import {createSupabaseServerClient} from '../../src/auth/supabase-server';
-function safeNext(v:FormDataEntryValue|null){const p=typeof v==='string'?v:'';return p.startsWith('/')&&!p.startsWith('//')?p:'/workspace';}
+function safeNext(v:FormDataEntryValue|null){const p=typeof v==='string'?v:'';return p.startsWith('/')&&!p.startsWith('//')&&!p.includes('\\\\')&&!/[\\u0000-\\u001f]/.test(p)?p:'/workspace';}
 export async function signIn(form:FormData){
  const email=String(form.get('email')??'').trim().toLowerCase(),password=String(form.get('password')??'');
  if(!email||!password)redirect('/login?error=Enter%20email%20and%20password');
