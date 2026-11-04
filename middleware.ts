@@ -7,7 +7,7 @@ export async function middleware(request:NextRequest){
  let response=NextResponse.next({request});
  const supabase=createServerClient(url,key,{cookies:{
   getAll(){return request.cookies.getAll();},
-  setAll(values,headers){values.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});values.forEach(({name,value,options})=>response.cookies.set(name,value,options));Object.entries(headers??{}).forEach(([k,v])=>response.headers.set(k,v));}
+  setAll(values){values.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});values.forEach(({name,value,options})=>response.cookies.set(name,value,options));}
  }});
  const {data}=await supabase.auth.getUser();
  const path=request.nextUrl.pathname;
