@@ -91,3 +91,11 @@ export async function addLead(form:FormData){
  await supabase.from('leads').insert({company_id:companyId,business_id:business.id,created_by:user.id,status:'NEW',score:0,score_label:'LOW'});
  redirect('/workspace/crm');
 }
+
+export async function requestAccountDeletion(){
+ const supabase=await createSupabaseServerClient();
+ const {data:{user}}=await supabase.auth.getUser();if(!user)redirect('/login');
+ const {data:existing}=await supabase.from('account_deletion_requests').select('id').eq('user_id',user.id).eq('status','requested').maybeSingle();
+ if(!existing)await supabase.from('account_deletion_requests').insert({user_id:user.id,status:'requested'});
+ redirect('/settings/account?requested=1');
+}
