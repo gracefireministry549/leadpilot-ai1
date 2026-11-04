@@ -1,25 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import type { AuthenticatedUser } from './server-auth';
 
-/** Validate the bearer token with Supabase. The token itself is never used as an account id. */
-export async function getSupabaseAuthenticatedUser(
-  request: Request,
-): Promise<AuthenticatedUser | null> {
-  const authorization = request.headers.get('authorization');
-  if (!authorization?.startsWith('Bearer ')) return null;
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) return null;
-
-  const token = authorization.slice('Bearer '.length).trim();
-  if (!token) return null;
-
-  const supabase = createClient(supabaseUrl, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
-
-  return { id: data.user.id, email: data.user.email ?? undefined };
+export async function createSupabaseServerClient() {
+  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if(!url||!key) throw new Error('Supabase environment variables are missing.');
+  const cookieStore=cookies();
+  return createServerClient(url,key,{cookies:{
+    getAll(){return cookieStore.getAll();},
+    setAll(values){try{values.forEach(({name,value,options})=>cookieStore.set(name,value,options));}catch{/* Server Components cannot write cookies; middleware refreshes. */}}
+  }});
+}
+export async function getSupabaseAuthenticatedUser(_request?:Request):Promise<AuthenticatedUser|null>{
+  try{const supabase=await createSupabaseServerClient();const {data,error}=await supabase.auth.getUser();if(error||!data.user)return null;return{id:data.user.id,email:data.user.email??undefined};}catch{return null;}
 }
