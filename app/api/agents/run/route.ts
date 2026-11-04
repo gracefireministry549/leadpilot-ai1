@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const query = typeof body.query === 'string' ? body.query.trim() : '';
   if (!query) return NextResponse.json({ error: 'Enter what you want the agent to find.' }, { status: 400 });
 
-  const result = await runAgent({ accountId: membership.company_id }, {
+  const result = await runAgent({ accountId: membership.company_id, userId: user.id }, {
     agent, query,
     location: typeof body.location === 'string' ? body.location : undefined,
     city: typeof body.city === 'string' ? body.city : undefined,
