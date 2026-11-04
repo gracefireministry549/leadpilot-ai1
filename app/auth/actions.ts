@@ -18,3 +18,22 @@ export async function signUp(form:FormData){
  redirect('/login?error=Check%20your%20email%20to%20verify%20your%20account.');
 }
 export async function signOut(){const supabase=await createSupabaseServerClient();await supabase.auth.signOut();redirect('/login');}
+
+export async function forgotPassword(formData:FormData){
+ const email=String(formData.get('email')??'').trim().toLowerCase();
+ if(!email)redirect('/forgot-password');
+ const supabase=await createSupabaseServerClient();
+ await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${process.env.NEXT_PUBLIC_SITE_URL??'http://localhost:3000'}/auth/callback?next=/reset-password`});
+ // Always show the same response to avoid account enumeration.
+ redirect('/forgot-password?sent=1');
+}
+export async function updatePassword(formData:FormData){
+ const password=String(formData.get('password')??'');
+ if(password.length<10)redirect('/reset-password?error=Password%20must%20be%20at%20least%2010%20characters');
+ const supabase=await createSupabaseServerClient();
+ const {data:{user},error:authError}=await supabase.auth.getUser();
+ if(authError||!user)redirect('/login?error=Open%20the%20password%20recovery%20link%20again');
+ const {error}=await supabase.auth.updateUser({password});
+ if(error)redirect('/reset-password?error=Unable%20to%20update%20password');
+ redirect('/login?error=Password%20updated.%20Please%20sign%20in.');
+}
