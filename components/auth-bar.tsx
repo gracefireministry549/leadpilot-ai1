@@ -1,12 +1,13 @@
 'use client';
 import {useEffect,useState} from 'react';
+import type {AuthChangeEvent,Session,User} from '@supabase/supabase-js';
 import {getSupabaseBrowserClient} from '@/src/auth/supabase-browser';
 type Props={onTokenChange:(token:string)=>void};
 export default function AuthBar({onTokenChange}:Props){
  const [email,setEmail]=useState(''),[ready,setReady]=useState(false);
  useEffect(()=>{const client=getSupabaseBrowserClient();if(!client){setReady(true);return;}let active=true;
- client.auth.getUser().then(({data})=>{if(active){setEmail(data.user?.email??'');setReady(true);onTokenChange('');}});
- const {data}=client.auth.onAuthStateChange((_event,session)=>{if(active){setEmail(session?.user.email??'');onTokenChange('');}});
+ client.auth.getUser().then(({data}:{data:{user:User|null}})=>{if(active){setEmail(data.user?.email??'');setReady(true);onTokenChange('');}});
+ const {data}=client.auth.onAuthStateChange((_event:AuthChangeEvent,session:Session|null)=>{if(active){setEmail(session?.user.email??'');onTokenChange('');}});
  return()=>{active=false;data.subscription.unsubscribe();};
  },[onTokenChange]);
  async function signOut(){const client=getSupabaseBrowserClient();if(client)await client.auth.signOut();window.location.assign('/login');}
