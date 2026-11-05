@@ -15,8 +15,8 @@ export async function POST(request: Request) {
   const user = await getSupabaseAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: 'Sign in to record revenue events.' }, { status: 401 });
   const body = await request.json().catch(() => ({}));
-  const allowed = ['qualified','draft_created','contacted','replied','meeting_booked','won','lost'];
+  const allowed = ['qualified','draft_created','contacted','replied','meeting_booked','lost'];
   if (!allowed.includes(body.event)) return NextResponse.json({ error: 'Invalid revenue event.' }, { status: 400 });
-  const row = await recordRevenueEvent(user.id, { leadId: body.leadId, agentId: body.agentId, event: body.event, value: Number(body.value || 0), currency: body.currency || 'USD', occurredAt: body.occurredAt || new Date().toISOString() });
+  const row = await recordRevenueEvent(user.id, { leadId: body.leadId, agentId: body.agentId, event: body.event, value: 0, currency: 'NGN', occurredAt: body.occurredAt || new Date().toISOString() });
   return NextResponse.json({ event: row }, { status: 201 });
 }
