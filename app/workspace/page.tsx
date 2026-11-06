@@ -1,33 +1,241 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import {redirect} from 'next/navigation';
-import {createSupabaseServerClient} from '../../src/auth/supabase-server';
+import { redirect } from 'next/navigation';
+import { createSupabaseServerClient } from '../../src/auth/supabase-server';
 
-const nav=[['Overview','/workspace'],['AI employees','/workspace/agents'],['Research','/workspace/research'],['Approvals','/workspace/approvals'],['CRM','/workspace/crm'],['Finance','/workspace/finance']];
-export default async function WorkspacePage(){
- const supabase=await createSupabaseServerClient();
- const {data:{user}}=await supabase.auth.getUser();
- if(!user)redirect('/login');
- const {data:companies}=await supabase.from('companies').select('id,name,created_at').order('created_at',{ascending:true});
- if(!companies?.length)redirect('/workspace/setup');
- const company=companies[0];
- const [employees,tasks,approvals,leads,reports,finance]=await Promise.all([
-  supabase.from('agent_employees').select('id,display_name,role_key,status').eq('company_id',company.id).order('created_at'),
-  supabase.from('company_tasks').select('id,status,title,created_at').eq('company_id',company.id).order('created_at',{ascending:false}).limit(6),
-  supabase.from('approval_requests').select('id,status').eq('company_id',company.id),
-  supabase.from('leads').select('id,status,score').eq('company_id',company.id),
-  supabase.from('research_reports').select('id').eq('company_id',company.id),
-  supabase.from('financial_entries').select('id,entry_type,status,amount_minor,currency').eq('company_id',company.id)
- ]);
- const pending=approvals.data?.filter(x=>x.status==='pending').length??0;
- const verifiedRevenue=finance.data?.filter(x=>x.entry_type==='revenue'&&x.status==='verified').reduce((sum,x)=>sum+Number(x.amount_minor),0)??0;
- return <main className="layout"><aside><div className="brand">LP <b>LeadPilot</b></div><div className="company"><small>COMPANY</small><strong>{company.name}</strong></div><nav>{nav.map(([label,href],i)=><Link className={i===0?'active':''} href={href} key={href}>{label}</Link>)}</nav><div className="asideFoot"><small>Signed in as</small><span>{user.email}</span><form action="/auth/signout" method="post"><button>Sign out</button></form></div></aside><section className="main"><header><div><p className="eyebrow">COMPANY COMMAND CENTRE</p><h1>Good to see you.</h1><p className="muted">Your business activity, AI workforce and decisions in one place.</p></div><Link className="action" href="/workspace/research">+ New research</Link></header>
- <div className="stats"><article><small>AI EMPLOYEES</small><strong>{employees.data?.length??0}</strong><span>Configured roles</span></article><article><small>LEADS</small><strong>{leads.data?.length??0}</strong><span>Company pipeline</span></article><article><small>NEEDS APPROVAL</small><strong>{pending}</strong><span>Waiting for your decision</span></article><article><small>VERIFIED REVENUE</small><strong>{(verifiedRevenue/100).toLocaleString(undefined,{style:'currency',currency:'NGN',maximumFractionDigits:0})}</strong><span>Verified entries only</span></article></div>
- <div className="grid"><section className="panel"><div className="panelHead"><div><p className="eyebrow">AI WORKFORCE</p><h2>Your employees</h2></div><Link href="/workspace/agents">Manage all →</Link></div><div className="employees">{(employees.data??[]).map(e=><div className="employee" key={e.id}><span className="orb">✦</span><div><strong>{e.display_name}</strong><small>{e.role_key.replaceAll('_',' ')}</small></div><i className={e.status==='active'?'on':'off'}>{e.status}</i></div>)}</div></section>
- <section className="panel"><div className="panelHead"><div><p className="eyebrow">DECISION CENTRE</p><h2>Approvals</h2></div><Link href="/workspace/approvals">Open inbox →</Link></div><div className="approvalCount"><strong>{pending}</strong><span>pending decisions</span></div><p className="muted">External messages, publishing, spending and other consequential actions require your explicit approval.</p></section>
- <section className="panel"><div className="panelHead"><div><p className="eyebrow">RECENT ACTIVITY</p><h2>Agent tasks</h2></div></div>{tasks.data?.length?(tasks.data??[]).map(t=><div className="task" key={t.id}><div><strong>{t.title}</strong><small>{new Date(t.created_at).toLocaleString()}</small></div><i>{t.status}</i></div>):<p className="muted">No tasks recorded yet. Start with an opportunity or lead research request.</p>}</section>
- <section className="panel"><div className="panelHead"><div><p className="eyebrow">RESEARCH LIBRARY</p><h2>Evidence & reports</h2></div><Link href="/workspace/reports">Browse →</Link></div><strong className="big">{reports.data?.length??0}</strong><p className="muted">Saved research reports and supporting evidence.</p></section></div>
- <footer>LeadPilot AI · Evidence before action · You remain in control</footer></section>
- <style>{`*{box-sizing:border-box}body{margin:0;background:#07101b;color:#eaf2f8;font-family:Inter,system-ui,sans-serif}.layout{min-height:100vh;display:grid;grid-template-columns:240px 1fr}.layout aside{position:sticky;top:0;height:100vh;padding:24px 17px;border-right:1px solid #203243;background:#091521;display:flex;flex-direction:column}.brand{font-size:20px;font-weight:900;color:#74dfbd}.brand b{color:#eef8f5}.company{margin:35px 0 20px;padding:14px;border:1px solid #263d4d;border-radius:12px;background:#0e1b28}.company small,.asideFoot small{display:block;color:#7890a2;font-size:9px;letter-spacing:.14em;margin-bottom:7px}.company strong{font-size:14px}.layout nav{display:grid;gap:5px}.layout nav a{padding:11px 12px;border-radius:9px;color:#93a8b7;text-decoration:none;font-size:13px}.layout nav a.active,.layout nav a:hover{background:#123026;color:#74dfbd}.asideFoot{margin-top:auto;display:grid;gap:7px;color:#9db0c0;font-size:11px;overflow-wrap:anywhere}.asideFoot button{margin-top:8px;background:transparent;border:1px solid #294052;border-radius:8px;padding:9px;color:#c4d4de}.main{max-width:1450px;width:100%;margin:auto;padding:36px 34px}.main header{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:28px}.eyebrow{font-size:10px;letter-spacing:.16em;font-weight:800;color:#74dfbd;margin:0 0 10px}.main h1{font-size:40px;letter-spacing:-.04em;margin:0}.muted{color:#8da2b3;font-size:13px;line-height:1.6}.action{padding:12px 16px;background:#74dfbd;border-radius:9px;color:#06140f;font-weight:800;text-decoration:none;font-size:12px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:17px}.stats article,.panel{background:#0c1824;border:1px solid #233849;border-radius:15px;padding:18px}.stats small{display:block;color:#7890a2;font-size:9px;letter-spacing:.12em}.stats strong{display:block;font-size:28px;margin:9px 0 4px;color:#eaf2f8}.stats span{color:#8196a7;font-size:11px}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.panel{min-width:0}.panelHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:17px}.panelHead h2{font-size:19px;margin:0}.panelHead a{font-size:11px;color:#74dfbd;text-decoration:none}.employee,.task{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid #1d3040}.employee>div,.task>div{display:grid;gap:4px;min-width:0}.employee strong,.task strong{font-size:12px}.employee small,.task small{font-size:10px;color:#8095a6}.orb{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#15352e;color:#74dfbd}.employee i,.task i{margin-left:auto;font-style:normal;font-size:9px;color:#9aabb8}.employee i.on{color:#74dfbd}.employee i.off{color:#f0bd75}.approvalCount{display:flex;align-items:baseline;gap:10px}.approvalCount strong{font-size:44px;color:#74dfbd}.approvalCount span{color:#9db0c0;font-size:12px}.big{font-size:40px;color:#74dfbd}footer{margin-top:34px;color:#5e7486;font-size:10px}@media(max-width:900px){.layout{grid-template-columns:1fr}.layout aside{position:static;height:auto;padding:14px;display:block}.company{margin:14px 0}.layout nav{display:flex;overflow:auto}.layout nav a{white-space:nowrap}.asideFoot{display:none}.main{padding:24px 15px}.stats{grid-template-columns:1fr 1fr}}@media(max-width:600px){.main header{display:block}.main h1{font-size:34px}.action{display:inline-block;margin-top:15px}.grid{grid-template-columns:1fr}.stats article{padding:14px}.stats strong{font-size:23px}}`}</style></main>;
+function formatCurrency(amountMinor: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amountMinor / 100);
+  } catch {
+    return (amountMinor / 100).toFixed(2) + ' ' + currency;
+  }
+}
+
+export default async function WorkspacePage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) redirect('/login');
+
+  const { data: membership } = await supabase
+    .from('company_memberships')
+    .select('company_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle();
+
+  if (!membership?.company_id) redirect('/workspace/setup');
+
+  const { data: company } = await supabase
+    .from('companies')
+    .select('id,name')
+    .eq('id', membership.company_id)
+    .maybeSingle();
+
+  if (!company) redirect('/workspace/setup');
+
+  const [employees, tasks, approvals, leads, reports, finance] = await Promise.all([
+    supabase.from('agent_employees')
+      .select('id,display_name,role_key,status,description')
+      .eq('company_id', company.id)
+      .order('created_at'),
+    supabase.from('company_tasks')
+      .select('id,status,title,created_at')
+      .eq('company_id', company.id)
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase.from('approval_requests')
+      .select('id,status,title,summary,created_at')
+      .eq('company_id', company.id)
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase.from('leads')
+      .select('id,status')
+      .eq('company_id', company.id),
+    supabase.from('research_reports')
+      .select('id')
+      .eq('company_id', company.id),
+    supabase.from('financial_entries')
+      .select('id,entry_type,status,amount_minor,currency')
+      .eq('company_id', company.id),
+  ]);
+
+  const employeeRows = employees.data ?? [];
+  const taskRows = tasks.data ?? [];
+  const approvalRows = approvals.data ?? [];
+  const leadRows = leads.data ?? [];
+  const reportCount = reports.data?.length ?? 0;
+  const activeEmployees = employeeRows.filter((employee) => employee.status === 'active');
+  const pendingApprovals = approvalRows.filter((request) => request.status === 'pending');
+  const revenueByCurrency = (finance.data ?? [])
+    .filter((entry) => entry.entry_type === 'revenue' && entry.status === 'verified')
+    .reduce<Record<string, number>>((totals, entry) => {
+      const currency = entry.currency || 'NGN';
+      totals[currency] = (totals[currency] ?? 0) + Number(entry.amount_minor || 0);
+      return totals;
+    }, {});
+  const revenueTotals = Object.entries(revenueByCurrency);
+
+  return (
+    <main className="overview">
+      <section className="overview-heading">
+        <div>
+          <p className="overview-eyebrow">COMPANY COMMAND CENTRE</p>
+          <h1>Your company, <span>in control.</span></h1>
+          <p className="overview-intro">A live view of your AI workforce, opportunities and decisions that need your attention.</p>
+        </div>
+        <div className="overview-heading-actions">
+          <span className="overview-live"><i /> LIVE WORKSPACE</span>
+          <Link className="overview-primary-action" href="/workspace/research">＋ Start research</Link>
+        </div>
+      </section>
+
+      <section className="overview-metrics" aria-label="Company metrics">
+        <article className="overview-metric">
+          <div className="overview-metric-top"><span>OPPORTUNITIES</span><b>⌕</b></div>
+          <strong>{leadRows.length.toLocaleString()}</strong>
+          <small>Leads in your company pipeline</small>
+        </article>
+        <article className="overview-metric">
+          <div className="overview-metric-top"><span>ACTIVE AI EMPLOYEES</span><b>✦</b></div>
+          <strong>{activeEmployees.length.toLocaleString()}<em> / {employeeRows.length}</em></strong>
+          <small>Specialists ready to work</small>
+        </article>
+        <article className="overview-metric overview-metric-attention">
+          <div className="overview-metric-top"><span>OWNER APPROVALS</span><b>✓</b></div>
+          <strong>{pendingApprovals.length.toLocaleString()}</strong>
+          <small>Decisions waiting for you</small>
+        </article>
+        <article className="overview-metric">
+          <div className="overview-metric-top"><span>RESEARCH REPORTS</span><b>▤</b></div>
+          <strong>{reportCount.toLocaleString()}</strong>
+          <small>Saved findings and evidence</small>
+        </article>
+      </section>
+
+      <section className="overview-main-grid">
+        <article className="overview-panel overview-workforce-panel">
+          <div className="overview-panel-heading">
+            <div>
+              <p className="overview-eyebrow">YOUR AI TEAM</p>
+              <h2>Meet your employees</h2>
+              <p>Specialists working across your company.</p>
+            </div>
+            <Link href="/workspace/agents">Manage team <span>↗</span></Link>
+          </div>
+          {employeeRows.length ? (
+            <div className="overview-employee-list">
+              {employeeRows.slice(0, 5).map((employee) => (
+                <div className="overview-employee" key={employee.id}>
+                  <span className="overview-employee-mark">✦</span>
+                  <div className="overview-employee-copy">
+                    <strong>{employee.display_name}</strong>
+                    <small>{employee.description || employee.role_key.replaceAll('_', ' ')}</small>
+                  </div>
+                  <span className={employee.status === 'active' ? 'overview-status is-active' : 'overview-status'}>
+                    <i /> {employee.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overview-empty">
+              <span>✦</span>
+              <strong>Your AI team is ready to be configured.</strong>
+              <Link href="/workspace/agents">Set up employees</Link>
+            </div>
+          )}
+        </article>
+
+        <article className="overview-panel overview-approval-panel">
+          <div className="overview-panel-heading">
+            <div>
+              <p className="overview-eyebrow">DECISION CENTRE</p>
+              <h2>Needs your approval</h2>
+            </div>
+            <Link href="/workspace/approvals">Open inbox <span>↗</span></Link>
+          </div>
+          <div className="overview-approval-count">
+            <strong>{pendingApprovals.length}</strong>
+            <span>pending decisions</span>
+          </div>
+          <p className="overview-panel-copy">External messages, publishing and spending stay paused until you explicitly approve them.</p>
+          {pendingApprovals.slice(0, 2).map((request) => (
+            <div className="overview-approval-item" key={request.id}>
+              <span className="overview-approval-mark">!</span>
+              <div><strong>{request.title}</strong><small>{request.summary}</small></div>
+            </div>
+          ))}
+          {!pendingApprovals.length ? <p className="overview-no-pending">You are all caught up. No decisions are waiting.</p> : null}
+        </article>
+
+        <article className="overview-panel overview-activity-panel">
+          <div className="overview-panel-heading">
+            <div>
+              <p className="overview-eyebrow">COMPANY ACTIVITY</p>
+              <h2>Recent agent work</h2>
+            </div>
+            <Link href="/workspace/agents">View task history <span>↗</span></Link>
+          </div>
+          {taskRows.length ? (
+            <div className="overview-task-list">
+              {taskRows.map((task) => (
+                <div className="overview-task" key={task.id}>
+                  <span className="overview-task-mark">↗</span>
+                  <div><strong>{task.title}</strong><small>{new Date(task.created_at).toLocaleString()}</small></div>
+                  <span className={'overview-task-status status-' + task.status}>{task.status}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overview-empty overview-empty-horizontal">
+              <span>↗</span>
+              <div><strong>No tasks have been run yet.</strong><small>Give an AI employee a clear first assignment.</small></div>
+              <Link href="/workspace/research">Assign first task</Link>
+            </div>
+          )}
+        </article>
+
+        <article className="overview-panel overview-finance-panel">
+          <div className="overview-panel-heading">
+            <div>
+              <p className="overview-eyebrow">VERIFIED FINANCE</p>
+              <h2>Revenue recorded</h2>
+            </div>
+            <Link href="/workspace/finance">Open finance <span>↗</span></Link>
+          </div>
+          {revenueTotals.length ? (
+            <div className="overview-revenue-list">
+              {revenueTotals.map(([currency, amount]) => (
+                <div className="overview-revenue-row" key={currency}>
+                  <span>{currency}</span>
+                  <strong>{formatCurrency(amount, currency)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overview-finance-empty">
+              <strong>No verified revenue yet</strong>
+              <p>Only entries checked and verified by an Owner or Admin appear here.</p>
+            </div>
+          )}
+          <div className="overview-finance-note"><i /> Revenue is shown separately by currency. No exchange rates are assumed.</div>
+        </article>
+      </section>
+
+      <section className="overview-quick-actions">
+        <Link href="/workspace/research"><span>⌕</span><div><strong>Find opportunities</strong><small>Start a new research task</small></div><b>↗</b></Link>
+        <Link href="/workspace/agents"><span>✦</span><div><strong>Manage AI employees</strong><small>Review your specialist team</small></div><b>↗</b></Link>
+        <Link href="/workspace/crm"><span>♙</span><div><strong>Open customer pipeline</strong><small>Review leads and customers</small></div><b>↗</b></Link>
+      </section>
+
+      <footer className="overview-footer">LEADPILOT AI <span>Evidence before action · You remain in control</span></footer>
+    </main>
+  );
 }
