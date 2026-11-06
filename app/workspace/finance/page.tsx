@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '../../../src/auth/supabase-server';
 import { addFinanceEntry, verifyFinanceEntry } from '../actions';
+import { aggregateVerifiedFinance } from '../../../src/workspace/finance';
 
 function formatMoney(amountMinor: number, currency: string) {
   try {
@@ -35,15 +36,7 @@ export default async function Finance({ searchParams }: { searchParams: { error?
     .limit(100);
 
   const entries = rows ?? [];
-  const verifiedTotals = entries
-    .filter((entry) => entry.status === 'verified')
-    .reduce<Record<string, { revenue: number; expenses: number }>>((totals, entry) => {
-      const currency = entry.currency || 'NGN';
-      totals[currency] ??= { revenue: 0, expenses: 0 };
-      if (entry.entry_type === 'revenue') totals[currency].revenue += Number(entry.amount_minor || 0);
-      if (entry.entry_type === 'expense') totals[currency].expenses += Number(entry.amount_minor || 0);
-      return totals;
-    }, {});
+  const verifiedTotals = aggregateVerifiedFinance(entries);
   const canVerify = ['owner', 'admin'].includes(membership.role);
 
   return (
