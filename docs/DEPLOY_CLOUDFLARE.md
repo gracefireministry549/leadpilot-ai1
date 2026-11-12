@@ -34,6 +34,13 @@ npm run cf:deploy
 
 `npm run cf:preview` builds and serves the Worker locally so you can check it before deploying.
 
+## Known limitation: Next.js 14
+
+The adapter refuses Next.js 14 by default because the Next.js team no longer supports it, so `cf:build` passes
+`--dangerouslyUseUnsupportedNextVersion`. This only silences the adapter's guard; it does not patch Next.js.
+Plan an upgrade to a supported Next.js release (15 or later). That upgrade needs code changes
+(`cookies()` and `searchParams` become async, and App Router requires React 19), so do it as its own change.
+
 ## Notes
 
 - Build with `cf:build`, not `next build`; the adapter wraps the Next.js build.
