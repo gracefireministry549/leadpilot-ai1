@@ -7,7 +7,8 @@ import { averageScore, isVerifiedLead, leadTier } from '../../../src/workspace/d
 
 type BusinessRef = { name?: string | null; city?: string | null; country?: string | null; website?: string | null; industry?: string | null };
 
-export default async function LeadIntelligence({ searchParams }: { searchParams: { q?: string } }) {
+export default async function LeadIntelligence(props: { searchParams: Promise<{ q?: string }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

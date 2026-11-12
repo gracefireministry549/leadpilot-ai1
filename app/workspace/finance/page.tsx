@@ -14,7 +14,8 @@ function formatMoney(amountMinor: number, currency: string) {
   }
 }
 
-export default async function Finance({ searchParams }: { searchParams: { error?: string } }) {
+export default async function Finance(props: { searchParams: Promise<{ error?: string }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

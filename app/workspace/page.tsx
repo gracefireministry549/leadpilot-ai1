@@ -36,7 +36,8 @@ function Delta({ change }: { change: number | null }) {
   );
 }
 
-export default async function WorkspacePage({ searchParams }: { searchParams: { warning?: string } }) {
+export default async function WorkspacePage(props: { searchParams: Promise<{ warning?: string }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

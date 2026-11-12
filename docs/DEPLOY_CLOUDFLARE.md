@@ -34,15 +34,14 @@ npm run cf:deploy
 
 `npm run cf:preview` builds and serves the Worker locally so you can check it before deploying.
 
-## Known limitation: Next.js 14
+## Next.js version
 
-The adapter refuses Next.js 14 by default because the Next.js team no longer supports it, so `cf:build` passes
-`--dangerouslyUseUnsupportedNextVersion`. This only silences the adapter's guard; it does not patch Next.js.
-Plan an upgrade to a supported Next.js release (15 or later). That upgrade needs code changes
-(`cookies()` and `searchParams` become async, and App Router requires React 19), so do it as its own change.
+The OpenNext adapter only supports Next.js 15.5.28 or later, so the app runs on Next.js 15 and React 19.
+`cookies()`, `searchParams` and `params` are async in these versions and the pages already await them.
 
 ## Notes
 
+- `GET /api/health` returns `{ ok: true }` and whether Supabase is configured. Use it to check a new deployment.
 - Build with `cf:build`, not `next build`; the adapter wraps the Next.js build.
 - All workspace pages are `force-dynamic`, so no KV or R2 binding is required.
 - Payment and messaging webhooks (Paystack, Telegram, WhatsApp) must be re-pointed at the new URL.
