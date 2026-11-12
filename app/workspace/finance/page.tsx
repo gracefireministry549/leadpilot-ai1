@@ -114,7 +114,7 @@ export default async function Finance({ searchParams }: { searchParams: { error?
         .currencyCard .net b{color:#8beac7}
         .financeForm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
         .financeForm label{display:grid;gap:6px;color:#a9bac4;font-size:10px;font-weight:700}
-        .financeForm input,.financeForm select{width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid #2a4052;border-radius:9px;background:#07111c;color:#edf5f8;font:inherit;font-size:12px}
+        .financeForm input,.financeForm select{width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid var(--ws-border);border-radius:9px;background:var(--ws-bg);color:#edf5f8;font:inherit;font-size:12px}
         .financeForm .descriptionField{grid-column:span 2}
         .financeForm button{align-self:end;min-height:40px;border:0;border-radius:9px;background:linear-gradient(135deg,#83edc8,#5cc8a5);color:#062017;font-size:11px;font-weight:800}
         .formNote{margin:10px 0 0;color:#7f96a5;font-size:10px}
