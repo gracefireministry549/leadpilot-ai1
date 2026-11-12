@@ -6,3 +6,4 @@ node_modules/
 .wrangler/
 .dev.vars
 *.tsbuildinfo
+pnpm-lock.yaml
