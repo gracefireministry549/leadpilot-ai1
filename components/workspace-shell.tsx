@@ -4,20 +4,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { isWorkspaceNavActive, workspaceNavigation } from '../src/workspace/navigation';
+import WorkspaceSearch from './workspace-search';
 
 type Props = {
   children: ReactNode;
   companyName: string;
   userEmail: string;
+  displayName?: string;
+  pendingApprovals?: number;
 };
 
-const mobileHrefs = ['/workspace', '/workspace/agents', '/workspace/research', '/workspace/approvals'];
+const mobileHrefs = ['/workspace', '/workspace/agents', '/workspace/leads', '/workspace/approvals'];
 
-export default function WorkspaceShell({ children, companyName, userEmail }: Props) {
+export default function WorkspaceShell({ children, companyName, userEmail, displayName, pendingApprovals = 0 }: Props) {
   const pathname = usePathname() || '/workspace';
   const [menuOpen, setMenuOpen] = useState(false);
   const activeItem = workspaceNavigation.find((item) => isWorkspaceNavActive(pathname, item.href));
-  const initials = (userEmail.split('@')[0] || 'Owner').slice(0, 2).toUpperCase();
+  const hasName = Boolean(displayName && displayName !== 'there');
+  const initials = ((hasName ? displayName : userEmail.split('@')[0]) || 'Owner').slice(0, 2).toUpperCase();
+  const approvalLabel = pendingApprovals > 99 ? '99+' : String(pendingApprovals);
 
   function renderNavigation(section: 'WORKSPACE' | 'MANAGEMENT') {
     return workspaceNavigation
@@ -34,7 +39,9 @@ export default function WorkspaceShell({ children, companyName, userEmail }: Pro
           >
             <span className="workspace-nav-icon" aria-hidden="true">{item.icon}</span>
             <span>{item.label}</span>
-            {item.href === '/workspace/approvals' ? <span className="workspace-nav-dot" /> : null}
+            {item.href === '/workspace/approvals' && pendingApprovals > 0 ? (
+              <span className="workspace-nav-count" aria-label={`${pendingApprovals} pending approvals`}>{approvalLabel}</span>
+            ) : null}
           </Link>
         );
       });
@@ -73,7 +80,7 @@ export default function WorkspaceShell({ children, companyName, userEmail }: Pro
         <div className="workspace-sidebar-footer">
           <div className="workspace-user-avatar">{initials}</div>
           <div className="workspace-user-copy">
-            <strong>Company owner</strong>
+            <strong>{hasName ? displayName : 'Company owner'}</strong>
             <span>{userEmail}</span>
           </div>
           <Link href="/settings/account" aria-label="Account settings" onClick={() => setMenuOpen(false)}>⚙</Link>
@@ -96,11 +103,15 @@ export default function WorkspaceShell({ children, companyName, userEmail }: Pro
             </button>
             <div className="workspace-breadcrumb">
               <span>COMPANY WORKSPACE</span>
-              <strong>{activeItem?.label || 'Company overview'}</strong>
+              <strong>{activeItem?.label || 'Dashboard'}</strong>
             </div>
           </div>
+          <WorkspaceSearch />
           <div className="workspace-topbar-right">
-            <span className="workspace-status"><i /> Workspace active</span>
+            <Link href="/workspace/approvals" className="workspace-bell" aria-label={pendingApprovals > 0 ? `${pendingApprovals} pending approvals` : 'No pending approvals'}>
+              <span aria-hidden="true">🔔</span>
+              {pendingApprovals > 0 ? <b>{approvalLabel}</b> : null}
+            </Link>
             <Link href="/settings/account" className="workspace-topbar-account">
               <span className="workspace-topbar-avatar">{initials}</span>
               <span>Account</span>
@@ -122,7 +133,7 @@ export default function WorkspaceShell({ children, companyName, userEmail }: Pro
               aria-current={active ? 'page' : undefined}
             >
               <span aria-hidden="true">{item.icon}</span>
-              <small>{item.label === 'Company overview' ? 'Home' : item.label === 'AI employees' ? 'Team' : item.label === 'Opportunity research' ? 'Research' : 'Approvals'}</small>
+              <small>{item.shortLabel}</small>
             </Link>
           );
         })}
