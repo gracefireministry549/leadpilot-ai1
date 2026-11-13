@@ -11,6 +11,11 @@ const defaultEmployees=[
  ['finance_assistant','Finance Assistant','Organises expense records and evidence-backed revenue.']
 ] as const;
 
+const back=(path:string,message:string)=>redirect(`${path}?error=${encodeURIComponent(message)}`);
+async function logEvent(supabase:Awaited<ReturnType<typeof createSupabaseServerClient>>,companyId:string,actorId:string,event_type:string,summary:string){
+ await supabase.from('activity_events').insert({company_id:companyId,actor_id:actorId,event_type,summary});
+}
+
 async function context(){
  const supabase=await createSupabaseServerClient();
  const {data:{user}}=await supabase.auth.getUser();
@@ -40,14 +45,16 @@ export async function setEmployeeStatus(form:FormData){
  const {supabase,companyId}=await context();
  const id=String(form.get('id')??''),status=String(form.get('status')??'');
  if(!id||!['active','paused'].includes(status))return;
- await supabase.from('agent_employees').update({status}).eq('id',id).eq('company_id',companyId);
+ const {error}=await supabase.from('agent_employees').update({status}).eq('id',id).eq('company_id',companyId);
+ if(error)back('/workspace/agents','Could not update this employee. Check your role and try again.');
  redirect('/workspace/agents');
 }
 export async function createTask(form:FormData){
  const {supabase,user,companyId}=await context();
  const title=String(form.get('title')??'').trim(),instructions=String(form.get('instructions')??'').trim(),employeeId=String(form.get('employeeId')??'');
  if(title.length<3||title.length>160)redirect('/workspace/agents?error=Task%20title%20must%20be%203%20to%20160%20characters');
- await supabase.from('company_tasks').insert({company_id:companyId,created_by:user.id,employee_id:employeeId||null,title,instructions,status:'queued'});
+ const {error}=await supabase.from('company_tasks').insert({company_id:companyId,created_by:user.id,employee_id:employeeId||null,title,instructions,status:'queued'});
+ if(error)back('/workspace/agents','Could not queue the task. Try again.');
  redirect('/workspace/agents');
 }
 export async function decideApproval(form:FormData){
@@ -57,13 +64,16 @@ export async function decideApproval(form:FormData){
  if(!id||!['approved','rejected'].includes(decision))return;
  const {data:row}=await supabase.from('approval_requests').update({status:decision,decided_by:user.id,decided_at:new Date().toISOString()}).eq('id',id).eq('company_id',companyId).eq('status','pending').select('id').maybeSingle();
  if(!row)redirect('/workspace/approvals?error=This%20request%20is%20no%20longer%20pending');
+ await logEvent(supabase,companyId,user.id,'approval_'+decision,`An approval request was ${decision}.`);
  redirect('/workspace/approvals');
 }
 export async function addFinanceEntry(form:FormData){
  const {supabase,user,companyId}=await context();
  const entry_type=String(form.get('entry_type')??''),description=String(form.get('description')??'').trim(),amount=Number(form.get('amount')??0),currency=String(form.get('currency')??'NGN').toUpperCase();
  if(!['revenue','expense'].includes(entry_type)||!description||!Number.isFinite(amount)||amount<=0||amount>100000000000||!/^[A-Z]{3}$/.test(currency))redirect('/workspace/finance?error=Enter%20a%20valid%20entry');
- await supabase.from('financial_entries').insert({company_id:companyId,created_by:user.id,entry_type,status:'unverified',amount_minor:Math.round(amount*100),currency,description});
+ const {error}=await supabase.from('financial_entries').insert({company_id:companyId,created_by:user.id,entry_type,status:'unverified',amount_minor:Math.round(amount*100),currency,description});
+ if(error)back('/workspace/finance','Could not save the entry. Try again.');
+ await logEvent(supabase,companyId,user.id,'finance_entry_added',`A ${entry_type} entry was recorded as unverified.`);
  redirect('/workspace/finance');
 }
 
@@ -71,14 +81,16 @@ export async function createApprovalRequest(form:FormData){
  const {supabase,user,companyId}=await context();
  const actionType=String(form.get('action_type')??'').trim(),title=String(form.get('title')??'').trim(),summary=String(form.get('summary')??'').trim();
  if(!actionType||!title||!summary)redirect('/workspace/approvals?error=Complete%20all%20approval%20request%20fields');
- await supabase.from('approval_requests').insert({company_id:companyId,requested_by:user.id,action_type:actionType,title,summary,payload:{requestedFrom:'workspace'},status:'pending'});
+ const {error}=await supabase.from('approval_requests').insert({company_id:companyId,requested_by:user.id,action_type:actionType,title,summary,payload:{requestedFrom:'workspace'},status:'pending'});
+ if(error)back('/workspace/approvals','Could not create the approval request. Try again.');
  redirect('/workspace/approvals');
 }
 export async function verifyFinanceEntry(form:FormData){
  const {supabase,companyId,role,user}=await context();
  if(!['owner','admin'].includes(role))redirect('/workspace/finance?error=Only%20owners%20and%20admins%20can%20verify%20entries');
  const id=String(form.get('id')??'');if(!id)return;
- await supabase.from('financial_entries').update({status:'verified'}).eq('id',id).eq('company_id',companyId).eq('status','unverified');
+ const {data:verified,error:verifyError}=await supabase.from('financial_entries').update({status:'verified'}).eq('id',id).eq('company_id',companyId).eq('status','unverified').select('id').maybeSingle();
+ if(verifyError||!verified)back('/workspace/finance','This entry could not be verified. It may already be verified or you may lack permission.');
  await supabase.from('activity_events').insert({company_id:companyId,actor_id:user.id,event_type:'finance_entry_verified',summary:'A financial entry was marked verified.'});
  redirect('/workspace/finance');
 }
@@ -88,7 +100,9 @@ export async function addLead(form:FormData){
  if(name.length<2)redirect('/workspace/crm?error=Business%20name%20is%20required');
  const {data:business,error}=await supabase.from('businesses').insert({company_id:companyId,account_id:companyId,name,website:website||null,city:city||null,country:country||null,email:email||null,source:'manual'}).select('id').single();
  if(error||!business)redirect('/workspace/crm?error=Could%20not%20save%20business');
- await supabase.from('leads').insert({company_id:companyId,account_id:companyId,business_id:business.id,created_by:user.id,status:'NEW',score:0,score_label:'LOW'});
+ const {error:leadError}=await supabase.from('leads').insert({company_id:companyId,account_id:companyId,business_id:business.id,created_by:user.id,status:'NEW',score:0,score_label:'LOW'});
+ if(leadError){await supabase.from('businesses').delete().eq('id',business.id).eq('company_id',companyId);back('/workspace/crm','Could not save the lead. Try again.');}
+ await logEvent(supabase,companyId,user.id,'lead_added',`Lead added: ${name}.`);
  redirect('/workspace/crm');
 }
 

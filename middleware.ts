@@ -11,7 +11,7 @@ export async function middleware(request:NextRequest){
  }});
  const {data}=await supabase.auth.getUser();
  const path=request.nextUrl.pathname;
- if((path.startsWith('/workspace')||path.startsWith('/settings')||path.startsWith('/api/company')||path.startsWith('/api/approvals'))&&!data.user){
+ if((path.startsWith('/workspace')||path.startsWith('/settings')||path.startsWith('/api/company')||path.startsWith('/api/workpilot')||path.startsWith('/api/orchestrate')||path.startsWith('/api/website-brand'))&&!data.user){
   const target=request.nextUrl.clone();target.pathname='/login';target.searchParams.set('next',path);return NextResponse.redirect(target);
  }
  response.headers.set('Cache-Control','private, no-store');return response;

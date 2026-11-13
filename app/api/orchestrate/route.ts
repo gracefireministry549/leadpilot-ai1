@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { orchestrate } from '../../../src/agents/orchestrator';
+import { unauthorizedUnlessSignedIn } from '../../../src/auth/require-user';
 
 export async function POST(request: NextRequest) {
+  const denied = await unauthorizedUnlessSignedIn(request);
+  if (denied) return denied;
   try {
     const body = await request.json();
     if (!body?.request || typeof body.request !== 'string') {

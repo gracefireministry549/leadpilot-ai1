@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { runWorkPilot } from '../../../src/agents/workpilot';
+import { unauthorizedUnlessSignedIn } from '../../../src/auth/require-user';
 
 export async function GET(request: Request) {
+  const denied = await unauthorizedUnlessSignedIn(request);
+  if (denied) return denied;
   const params = new URL(request.url).searchParams;
   const query = params.get('query')?.trim() || '';
   if (!query) return NextResponse.json({ error: 'Add a job search in ?query=' }, { status: 400 });
@@ -9,6 +12,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await unauthorizedUnlessSignedIn(request);
+  if (denied) return denied;
   const body = await request.json().catch(() => ({}));
   const query = typeof body.query === 'string' ? body.query.trim() : '';
   if (!query) return NextResponse.json({ error: 'Enter the work you want to find.' }, { status: 400 });
