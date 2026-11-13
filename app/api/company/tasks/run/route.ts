@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '../../../../../src/auth/supabase-server';
-import { runAgent } from '../../../../../src/agents/runtime';
+import { runAgentWithBrain } from '../../../../../src/agents/brain';
 
 const mapping: Record<string, string> = {
   company_manager: 'general-manager',
@@ -11,14 +11,6 @@ const mapping: Record<string, string> = {
   finance_assistant: 'general-manager',
 };
 const RUNNER_ROLES = ['owner', 'admin', 'member'];
-
-/** runAgent reports unknown/unsupported agents as a returned status, not a thrown error. */
-function agentFailure(result: unknown): string | null {
-  const status = typeof (result as { status?: unknown })?.status === 'number' ? (result as { status: number }).status : 200;
-  if (status < 400) return null;
-  const body = (result as { body?: { error?: unknown } }).body;
-  return typeof body?.error === 'string' ? body.error : `The agent could not complete this task (status ${status}).`;
-}
 
 type Employee = { id: string; role_key: string; display_name: string; status: string };
 
@@ -86,15 +78,22 @@ export async function POST(request: Request) {
     supabase.from('company_tasks').update({ status: 'failed', error: message, completed_at: new Date().toISOString() }).eq('id', activeTaskId).eq('company_id', companyId);
 
   try {
-    const result = await runAgent({ accountId: companyId, userId: user.id }, { agent: agent as never, query: instructions ? title + '\n\n' + instructions : title, limit: 20 });
-    const failure = agentFailure(result);
-    if (failure) {
-      await markFailed(failure);
-      return NextResponse.json({ error: failure, taskId: activeTaskId }, { status: 502 });
+    const outcome = await runAgentWithBrain({
+      supabase,
+      userId: user.id,
+      companyId,
+      employeeRole: employee?.role_key ?? 'company_manager',
+      agent: agent as never,
+      title,
+      instructions,
+    });
+    if (!outcome.ok) {
+      await markFailed(outcome.error);
+      return NextResponse.json({ error: outcome.error, taskId: activeTaskId }, { status: outcome.status });
     }
 
-    const payload = result && typeof result === 'object' && 'body' in result ? (result as { body: unknown }).body : result;
-    const data = (payload ?? {}) as { message?: unknown; results?: unknown; evidence?: unknown };
+    const payload = outcome.payload;
+    const data = payload as { message?: unknown; results?: unknown; evidence?: unknown };
 
     const { error: updateError } = await supabase.from('company_tasks').update({ status: 'succeeded', result: payload, completed_at: new Date().toISOString() }).eq('id', activeTaskId).eq('company_id', companyId);
     if (updateError) return NextResponse.json({ error: 'The task ran but its result could not be saved.', taskId: activeTaskId }, { status: 500 });
@@ -106,11 +105,11 @@ export async function POST(request: Request) {
       title,
       summary: typeof data.message === 'string' ? data.message : 'Agent task completed. Review the structured findings and source evidence.',
       findings: Array.isArray(data.results) ? data.results : [],
-      evidence: Array.isArray(data.evidence) ? data.evidence : [],
+      evidence: Array.isArray(data.evidence) ? data.evidence : (((payload.brief as { picks?: unknown } | undefined)?.picks as unknown[]) ?? []),
       confidence: null,
     });
 
-    return NextResponse.json({ taskId: activeTaskId, agent, result: payload, reportSaved: !reportError }, { status: 200 });
+    return NextResponse.json({ taskId: activeTaskId, agent, result: payload, reportSaved: !reportError, cached: outcome.cached }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Agent execution failed.';
     await markFailed(message);

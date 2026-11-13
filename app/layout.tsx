@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './leadpilot.css';
+import './glass.css';
 
 export const metadata: Metadata = {
   title: 'LeadPilot AI',
