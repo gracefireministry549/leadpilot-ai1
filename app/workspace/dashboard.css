@@ -1,8 +1,9 @@
 /* Command-centre theme: deep navy with blue/violet accents. Loaded after workspace-shell.css. */
 :root {
-  --ws-bg: #060a1e; --ws-sidebar: #080d26; --ws-panel: #0c1330; --ws-panel-raised: #111a40; --ws-border: #1c2653;
-  --ws-text: #eef1ff; --ws-muted: #8f9ac4; --ws-accent: #8ea0ff; --ws-accent-dim: #1b2358; --ws-accent-strong: #4f6bff;
-  --ws-good: #3ddc97; --ws-warn: #f5b84b; --ws-bad: #ff6b81;
+  --ws-bg: transparent; --ws-sidebar: rgba(10, 16, 52, .5);
+  --ws-panel: rgba(255, 255, 255, .06); --ws-panel-raised: rgba(255, 255, 255, .1); --ws-border: rgba(255, 255, 255, .14);
+  --ws-text: #f2f4ff; --ws-muted: #a6b0d8; --ws-accent: #a9b6ff; --ws-accent-dim: rgba(120, 140, 255, .2); --ws-accent-strong: #5b74ff;
+  --ws-good: #4de3a4; --ws-warn: #f5c25b; --ws-bad: #ff7b90;
 }
 .workspace-sidebar { background: linear-gradient(180deg, #0a1030 0%, #070b22 100%); }
 .workspace-brand-mark { border-color: #4a5bd6; background: linear-gradient(145deg, #5b4bff, #2f6bff); color: #fff; box-shadow: 0 8px 24px rgba(79, 107, 255, .3); }
@@ -91,4 +92,25 @@
   .workspace-search kbd { display: none; }
   .workspace-search { max-width: none; }
   .workspace-breadcrumb { display: none; }
+}
+
+
+/* ---- Glassmorphism for the whole workspace ---- */
+.workspace-frame { background: transparent; }
+.workspace-sidebar { background: var(--ws-sidebar); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-right: 1px solid var(--glass-border); box-shadow: inset -1px 0 0 rgba(255, 255, 255, .05); }
+.workspace-topbar { background: rgba(10, 16, 52, .42); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-bottom: 1px solid var(--glass-border); }
+.workspace-mobile-nav { background: rgba(10, 16, 52, .6); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-top: 1px solid var(--glass-border); }
+.workspace-company-card, .workspace-search, .workspace-bell, .workspace-menu-button, .dash-panel, .dash-kpi, .dash-employee, .dash-approval, .dash-empty, .dash-pill,
+.workspace-content :is(section, article, form, details, aside, table) {
+  background: var(--glass-fill); border-color: var(--glass-border);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+}
+.dash-panel, .dash-kpi, .workspace-content :is(article, form) { box-shadow: var(--glass-shadow); }
+.dash-employee, .dash-approval { background: var(--glass-fill-strong); }
+/* Avoid stacking blur on nested glass: inner cards inherit the parent's frosted backdrop. */
+.dash-panel :is(.dash-employee, .dash-approval, .dash-empty), .dash-panel article, .dash-panel section { backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; }
+.dash-primary, .run-task button { box-shadow: 0 8px 24px rgba(79, 107, 255, .35); }
+.workspace-content input, .workspace-content select, .workspace-content textarea { background: rgba(255, 255, 255, .07); border-color: var(--glass-border); color: var(--ws-text); }
+@media (prefers-reduced-transparency: reduce) {
+  .workspace-sidebar, .workspace-topbar, .workspace-mobile-nav, .dash-panel, .dash-kpi, .workspace-content :is(section, article, form, details, aside, table) { background: rgba(14, 20, 58, .96); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
