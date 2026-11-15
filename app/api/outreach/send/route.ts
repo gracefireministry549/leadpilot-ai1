@@ -109,7 +109,7 @@ export async function POST(request: Request) {
 
   let claimed = false;
   try {
-    claimed = await claimApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id);
+    claimed = await claimApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, { leadId, recipient: email, subject, text });
   } catch {
     return NextResponse.json({ error: 'Could not securely claim this approval. No email was sent.' }, { status: 503 });
   }
