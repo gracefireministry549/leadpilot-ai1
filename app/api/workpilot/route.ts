@@ -15,7 +15,7 @@ async function authorize(request: Request) {
 
 export async function GET(request: Request) {
   const access = await authorize(request);
-  if (access.error) return access.error;
+  if ('error' in access) return access.error;
   const params = new URL(request.url).searchParams;
   const query = params.get('query')?.trim() || '';
   if (!query) return NextResponse.json({ error: 'Add a business or task description in ?query=' }, { status: 400 });
