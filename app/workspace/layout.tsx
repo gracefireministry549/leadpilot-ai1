@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '../../src/auth/supabase-server';
+import { getActiveCompanyMembership } from '../../src/auth/company-membership';
 import WorkspaceShell from '../../components/workspace-shell';
 import { displayNameFrom } from '../../src/workspace/dashboard-data';
 import './workspace-shell.css';
@@ -14,13 +15,7 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
 
   if (!user) redirect('/login');
 
-  const { data: membership } = await supabase
-    .from('company_memberships')
-    .select('company_id')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .limit(1)
-    .maybeSingle();
+  const { data: membership } = await getActiveCompanyMembership(supabase, user.id);
 
   let companyName = 'New company workspace';
   let pendingApprovals = 0;
