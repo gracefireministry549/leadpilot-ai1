@@ -79,9 +79,20 @@ export async function addFinanceEntry(form:FormData){
 
 export async function createApprovalRequest(form:FormData){
  const {supabase,user,companyId}=await context();
- const actionType=String(form.get('action_type')??'').trim(),title=String(form.get('title')??'').trim(),summary=String(form.get('summary')??'').trim();
+ const actionType=String(form.get('action_type')??'').trim().slice(0,80),title=String(form.get('title')??'').trim().slice(0,180),summary=String(form.get('summary')??'').trim().slice(0,2000);
  if(!actionType||!title||!summary)redirect('/workspace/approvals?error=Complete%20all%20approval%20request%20fields');
- const {error}=await supabase.from('approval_requests').insert({company_id:companyId,requested_by:user.id,action_type:actionType,title,summary,payload:{requestedFrom:'workspace'},status:'pending'});
+ let payload:Record<string,unknown>={requestedFrom:'workspace'};
+ if(actionType==='outbound_email'){
+  const leadId=String(form.get('lead_id')??'').trim(),to=String(form.get('recipient')??'').trim().toLowerCase(),subject=String(form.get('email_subject')??'').trim(),text=String(form.get('email_text')??'').trim(),consentConfirmed=form.get('consent_confirmed')==='on';
+  if(!leadId||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)||!subject||subject.length>180||!text||text.length>8000||!consentConfirmed)redirect('/workspace/approvals?error=Outbound%20email%20approval%20needs%20a%20lead%2C%20valid%20recipient%2C%20message%20and%20consent%20confirmation');
+  const {data:lead,error:leadError}=await supabase.from('leads').select('id,businesses(email)').eq('id',leadId).eq('company_id',companyId).maybeSingle();
+  if(leadError||!lead)redirect('/workspace/approvals?error=Lead%20not%20found%20in%20this%20company');
+  const related=lead.businesses as unknown as {email?:string|null}|{email?:string|null}[]|null;
+  const business=Array.isArray(related)?related[0]:related;
+  if(!business?.email||business.email.trim().toLowerCase()!==to)redirect('/workspace/approvals?error=Recipient%20must%20match%20the%20lead%20email');
+  payload={leadId,to,subject,text,consentConfirmed:true};
+ }
+ const {error}=await supabase.from('approval_requests').insert({company_id:companyId,requested_by:user.id,action_type:actionType,title,summary,payload,status:'pending'});
  if(error)back('/workspace/approvals','Could not create the approval request. Try again.');
  redirect('/workspace/approvals');
 }
