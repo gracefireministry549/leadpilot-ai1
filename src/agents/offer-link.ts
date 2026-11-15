@@ -14,7 +14,7 @@ export const PAYSTACK_CURRENCY_MINOR_UNITS: Readonly<Record<string, number>> = {
 };
 
 export function isSupportedPaystackCurrency(currency: string): boolean {
-  return Object.hasOwn(PAYSTACK_CURRENCY_MINOR_UNITS, currency.trim().toUpperCase());
+  return PAYSTACK_CURRENCY_MINOR_UNITS[currency.trim().toUpperCase()] !== undefined;
 }
 
 export function toPaystackMinorUnits(amount: number, currency: string): number | null {
