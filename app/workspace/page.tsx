@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '../../src/auth/supabase-server';
+import { getActiveCompanyMembership } from '../../src/auth/company-membership';
 import WorkspaceGreeting from '../../components/workspace-greeting';
 import { aggregateVerifiedFinance } from '../../src/workspace/finance';
 import { averageScore, bucketByWeek, chartPoints, displayNameFrom, isVerifiedLead, leadTier, weekOverWeek } from '../../src/workspace/dashboard-data';
@@ -42,7 +43,7 @@ export default async function WorkspacePage(props: { searchParams: Promise<{ war
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: membership } = await supabase.from('company_memberships').select('company_id').eq('user_id', user.id).eq('status', 'active').limit(1).maybeSingle();
+  const { data: membership } = await getActiveCompanyMembership(supabase, user.id);
   if (!membership?.company_id) redirect('/workspace/setup');
 
   const { data: company } = await supabase.from('companies').select('id,name').eq('id', membership.company_id).maybeSingle();
