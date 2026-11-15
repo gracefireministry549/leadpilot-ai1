@@ -3,6 +3,7 @@ import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../
 import { configuredEmailProvider } from '../../../../src/outreach/email-provider';
 import { getAgentMemoryBus } from '../../../../src/agents/memory-bus';
 import { rateLimitStrict } from '../../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../../src/auth/company-membership';
 
 const MAX_BODY_BYTES = 16_384;
 const MAX_SUBJECT_LENGTH = 180;
@@ -44,9 +45,8 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data: membership, error: membershipError } = await supabase
-    .from('company_memberships').select('company_id,role').eq('user_id', user.id)
-    .eq('status', 'active').limit(1).maybeSingle();
+  const requestedCompanyId = typeof payload.companyId === 'string' ? payload.companyId.trim() : undefined;
+  const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
   if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
   if (!membership) return NextResponse.json({ error: 'Company membership required.' }, { status: 403 });
 
