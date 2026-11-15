@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import { isSupportedPaystackCurrency } from '../../../../src/agents/offer-link';
 
 const MAX_BODY_BYTES = 1_000_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
   if (!reference || reference.length > 200) return NextResponse.json({ error: 'Missing or invalid transaction reference.' }, { status: 400 });
   if (!UUID_PATTERN.test(userId)) return NextResponse.json({ error: 'Payment has no valid owning user.' }, { status: 422 });
-  if (!Number.isSafeInteger(amount) || amount <= 0 || !/^[A-Z]{3}$/.test(currency)) {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || !isSupportedPaystackCurrency(currency)) {
     return NextResponse.json({ error: 'Payment amount or currency is invalid.' }, { status: 422 });
   }
 
