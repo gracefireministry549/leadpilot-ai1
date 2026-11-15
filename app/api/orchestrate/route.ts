@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { orchestrate } from '../../../src/agents/orchestrator';
 import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../src/auth/supabase-server';
 import { rateLimit } from '../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../src/auth/company-membership';
 
 const RUNNER_ROLES = new Set(['owner', 'admin', 'member']);
 const MAX_REQUEST_LENGTH = 2_000;
@@ -44,9 +45,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: membership, error: membershipError } = await supabase
-      .from('company_memberships').select('company_id,role').eq('user_id', user.id)
-      .eq('status', 'active').limit(1).maybeSingle();
+    const requestedCompanyId = typeof payload.companyId === 'string' ? payload.companyId.trim() : undefined;
+    const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
     if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
     if (!membership || !RUNNER_ROLES.has(membership.role)) {
       return NextResponse.json({ error: 'An active company membership is required.' }, { status: 403 });
