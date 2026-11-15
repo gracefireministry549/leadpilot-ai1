@@ -17,6 +17,7 @@ function fakeSupabase(result: unknown) {
 test('requested company is always scoped to the signed-in active membership', async () => {
   const fake = fakeSupabase({ data: { company_id: 'company-b', role: 'member' }, error: null });
   const result = await getActiveCompanyMembership(fake.client as never, 'user-1', 'company-b');
+  assert.ok(result.data);
   assert.equal(result.data.company_id, 'company-b');
   assert.ok(fake.calls.some(([name, args]) => name === 'eq' && args[0] === 'company_id' && args[1] === 'company-b'));
   assert.ok(fake.calls.some(([name, args]) => name === 'eq' && args[0] === 'user_id' && args[1] === 'user-1'));
@@ -26,6 +27,7 @@ test('requested company is always scoped to the signed-in active membership', as
 test('default company resolution is stable and uses oldest active membership', async () => {
   const fake = fakeSupabase({ data: { company_id: 'company-oldest', role: 'owner' }, error: null });
   const result = await getActiveCompanyMembership(fake.client as never, 'user-1');
+  assert.ok(result.data);
   assert.equal(result.data.company_id, 'company-oldest');
   assert.ok(fake.calls.some(([name, args]) => name === 'order' && args[0] === 'created_at'));
   assert.ok(!fake.calls.some(([name, args]) => name === 'eq' && args[0] === 'company_id'));
