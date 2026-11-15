@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSupportedPaystackCurrency, toPaystackMinorUnits } from './offer-link';
+import { fromPaystackMinorUnits, isSupportedPaystackCurrency, toPaystackMinorUnits } from './offer-link';
 
 test('converts a NGN offer amount from naira to kobo', () => {
   assert.equal(toPaystackMinorUnits(5_000, 'NGN'), 500_000);
@@ -23,4 +23,12 @@ test('rejects unsupported currencies and unsafe amounts', () => {
   assert.equal(toPaystackMinorUnits(0, 'NGN'), null);
   assert.equal(toPaystackMinorUnits(1.001, 'NGN'), null);
   assert.equal(toPaystackMinorUnits(Number.MAX_SAFE_INTEGER, 'NGN'), null);
+});
+
+
+test('converts provider minor units back to major units by currency', () => {
+  assert.equal(fromPaystackMinorUnits(500_000, 'NGN'), 5_000);
+  assert.equal(fromPaystackMinorUnits(1_250, 'USD'), 12.5);
+  assert.equal(fromPaystackMinorUnits(5_000, 'XOF'), 5_000);
+  assert.equal(fromPaystackMinorUnits(10, 'JPY'), null);
 });
