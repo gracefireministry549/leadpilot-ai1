@@ -2,7 +2,7 @@ name: LeadPilot CI
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'fix/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -22,13 +22,49 @@ env:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: leadpilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d leadpilot_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 20
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Install dependencies without requiring a lockfile
         run: npm install --no-package-lock
+      - name: Report dependency advisories
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node -e "const a=require('/tmp/npm-audit.json'); console.log('Dependency advisories:', JSON.stringify(a.metadata?.vulnerabilities ?? {})); for (const [name, item] of Object.entries(a.vulnerabilities ?? {})) console.log(name + ': ' + item.severity + ' | fix: ' + JSON.stringify(item.fixAvailable));"
+      - name: Validate Python worker
+        working-directory: services/python-agents
+        run: |
+          python -m py_compile service.py general_manager.py general_manager_route.py
+          python -m unittest discover -s . -p 'test_*.py' -v
+      - name: Validate payment, outreach and RLS migrations on disposable Postgres
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          export PGPASSWORD=postgres
+          psql -h localhost -U postgres -d leadpilot_test -v ON_ERROR_STOP=1 -f supabase/tests/migration_contract_setup.sql
+          psql -h localhost -U postgres -d leadpilot_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261115140000_currency_minor_units.sql
+          psql -h localhost -U postgres -d leadpilot_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261115150000_atomic_outreach_execution.sql
+          psql -h localhost -U postgres -d leadpilot_test -v ON_ERROR_STOP=1 -f supabase/migrations/20261115160000_same_company_relationship_guards.sql
+          psql -h localhost -U postgres -d leadpilot_test -v ON_ERROR_STOP=1 -f supabase/tests/migration_contract_assertions.sql
       - name: Typecheck
         run: npm run typecheck
       - name: Lint

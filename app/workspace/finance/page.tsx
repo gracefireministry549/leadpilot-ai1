@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '../../../src/auth/supabase-server';
 import { addFinanceEntry, verifyFinanceEntry } from '../actions';
 import { aggregateVerifiedFinance } from '../../../src/workspace/finance';
+import { getActiveCompanyMembership } from '../../../src/auth/company-membership';
 
 function formatMoney(amountMinor: number, currency: string) {
   try {
@@ -20,13 +21,7 @@ export default async function Finance(props: { searchParams: Promise<{ error?: s
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: membership } = await supabase
-    .from('company_memberships')
-    .select('company_id,role')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .limit(1)
-    .maybeSingle();
+  const { data: membership } = await getActiveCompanyMembership(supabase, user.id);
   if (!membership?.company_id) redirect('/workspace/setup');
 
   const { data: rows } = await supabase

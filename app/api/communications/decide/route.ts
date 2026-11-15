@@ -1,21 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { decideClientReply } from '../../../../src/communications/agent';
 import type { CommunicationMessage } from '../../../../src/communications/types';
+import { isChannel, normalizeCommunicationContext } from '../../../../src/communications/request-validation';
+import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
+import { rateLimit } from '../../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../../src/auth/company-membership';
+
+const MAX_BODY_BYTES = 16_384;
+const MAX_TEXT_LENGTH = 4_000;
 
 export async function POST(request: NextRequest) {
+  const user = await getSupabaseAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > MAX_BODY_BYTES) return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+
+  let body: unknown;
   try {
-    const body = await request.json();
-    if (!body?.text || typeof body.text !== 'string') return NextResponse.json({ error: 'text is required' }, { status: 400 });
-    const message: CommunicationMessage = {
-      id: String(body.id ?? crypto.randomUUID()),
-      channel: body.channel ?? 'web',
-      conversationId: String(body.conversationId ?? 'default'),
-      direction: 'inbound',
-      text: body.text,
-      createdAt: new Date().toISOString(),
-    };
-    return NextResponse.json(decideClientReply(message, Array.isArray(body.context) ? body.context : []));
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+    }
+    body = JSON.parse(raw);
   } catch {
-    return NextResponse.json({ error: 'Invalid communication request' }, { status: 400 });
+    return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
   }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
+  }
+
+  const input = body as Record<string, unknown>;
+  const text = typeof input.text === 'string' ? input.text.trim() : '';
+  if (!text) return NextResponse.json({ error: 'text is required' }, { status: 400 });
+  if (text.length > MAX_TEXT_LENGTH) return NextResponse.json({ error: 'text must be no longer than 4,000 characters.' }, { status: 400 });
+
+  const supabase = await createSupabaseServerClient();
+  const requestedCompanyId = typeof input.companyId === 'string' ? input.companyId.trim() : undefined;
+  const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
+  if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
+  if (!membership) return NextResponse.json({ error: 'Company membership required.' }, { status: 403 });
+
+  const configuredLimit = Number(process.env.AGENT_RATE_LIMIT_PER_HOUR || 30);
+  const limit = Number.isFinite(configuredLimit) ? Math.max(1, Math.min(500, Math.floor(configuredLimit))) : 30;
+  const rate = await rateLimit('rate:communications-decide:' + membership.company_id + ':' + user.id, limit, 3600);
+  if (!rate.allowed) return NextResponse.json({ error: 'You have reached the hourly communication analysis limit.' }, { status: 429 });
+
+  if (input.channel !== undefined && !isChannel(input.channel)) {
+    return NextResponse.json({ error: 'channel must be telegram, whatsapp, or web.' }, { status: 400 });
+  }
+
+  const message: CommunicationMessage = {
+    id: typeof input.id === 'string' ? input.id.slice(0, 100) : crypto.randomUUID(),
+    channel: isChannel(input.channel) ? input.channel : 'web',
+    conversationId: typeof input.conversationId === 'string' ? input.conversationId.slice(0, 120) : 'default',
+    direction: 'inbound',
+    text,
+    createdAt: new Date().toISOString(),
+  };
+  const context = normalizeCommunicationContext(input.context);
+  return NextResponse.json(decideClientReply(message, context));
 }

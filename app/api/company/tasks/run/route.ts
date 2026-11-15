@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '../../../../../src/auth/supabase-server';
 import { runAgentWithBrain } from '../../../../../src/agents/brain';
+import { rateLimit } from '../../../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../../../src/auth/company-membership';
+
+const MAX_BODY_BYTES = 16_384;
 
 const mapping: Record<string, string> = {
   company_manager: 'general-manager',
@@ -19,16 +23,35 @@ export async function POST(request: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
-  const body = await request.json().catch(() => ({}));
-  const taskId = typeof body.taskId === 'string' ? body.taskId : '';
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > MAX_BODY_BYTES) return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+  let parsed: unknown;
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+    parsed = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
+  }
+  const body = parsed as Record<string, unknown>;
+  const taskId = typeof body.taskId === 'string' ? body.taskId.trim().slice(0, 120) : '';
   let title = typeof body.title === 'string' ? body.title.trim() : '';
-  let instructions = typeof body.instructions === 'string' ? body.instructions.trim() : '';
-  const employeeRole = typeof body.employeeRole === 'string' ? body.employeeRole : '';
+  let instructions = typeof body.instructions === 'string' ? body.instructions.trim().slice(0, 8_000) : '';
+  const employeeRole = typeof body.employeeRole === 'string' ? body.employeeRole.slice(0, 80) : '';
 
-  const { data: membership } = await supabase.from('company_memberships').select('company_id,role').eq('user_id', user.id).eq('status', 'active').limit(1).maybeSingle();
+  const requestedCompanyId = typeof body.companyId === 'string' ? body.companyId.trim() : undefined;
+  const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
+  if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
   if (!membership) return NextResponse.json({ error: 'Company membership required.' }, { status: 403 });
   if (!RUNNER_ROLES.includes(membership.role)) return NextResponse.json({ error: 'Your role is read-only and cannot run tasks.' }, { status: 403 });
   const companyId = membership.company_id as string;
+  const configuredLimit = Number(process.env.AGENT_RATE_LIMIT_PER_HOUR || 30);
+  const limit = Number.isFinite(configuredLimit) ? Math.max(1, Math.min(500, Math.floor(configuredLimit))) : 30;
+  const rate = await rateLimit('rate:company-task:' + companyId + ':' + user.id, limit, 3600);
+  if (!rate.allowed) return NextResponse.json({ error: 'You have reached the hourly task execution limit.' }, { status: 429 });
 
   let employee: Employee | null = null;
   let activeTaskId = '';

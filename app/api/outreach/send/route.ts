@@ -1,7 +1,156 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
-import { configuredLeadStore } from '../../../../src/leads/store-factory';
-import { canSendOutreach } from '../../../../src/agents/outreach-guard';
+import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
 import { configuredEmailProvider } from '../../../../src/outreach/email-provider';
 import { getAgentMemoryBus } from '../../../../src/agents/memory-bus';
-export async function POST(request:Request){const user=await getSupabaseAuthenticatedUser(request);if(!user)return NextResponse.json({error:'Sign in before sending outreach.'},{status:401});const body=await request.json().catch(()=>({}));if(body.approved!==true)return NextResponse.json({error:'Human approval is required. Set approved=true only after review.'},{status:400});const leadId=typeof body.leadId==='string'?body.leadId:'';if(!leadId)return NextResponse.json({error:'leadId is required.'},{status:400});const store=configuredLeadStore();const leads=await store.listLeads(user.id);const lead=leads.find(item=>item.id===leadId);if(!lead)return NextResponse.json({error:'Lead not found.'},{status:404});const business=store.getBusiness?await store.getBusiness(lead.businessId):null;if(!business)return NextResponse.json({error:'Business record not found.'},{status:404});const guard=canSendOutreach({email:business.email,phone:business.phone,optedOut:Boolean(body.optedOut),sentToday:0});if(!guard.allowed)return NextResponse.json({error:guard.reason},{status:409});if(!business.email)return NextResponse.json({error:'Email sending requires a verified email address; the guard only found a phone channel.'},{status:409});const provider=configuredEmailProvider();if(!provider)return NextResponse.json({error:'Email sending is not configured. Add RESEND_API_KEY and OUTREACH_FROM_EMAIL; no message was sent.'},{status:503});const subject=typeof body.subject==='string'?body.subject.trim():'';const text=typeof body.text==='string'?body.text.trim():'';if(!subject||!text)return NextResponse.json({error:'subject and text are required.'},{status:400});try{const sent=await provider.send({to:business.email,subject,text});await getAgentMemoryBus().appendEvent({accountId:user.id,leadId,agent:'outreach',type:'outreach.sent',payload:{provider:'resend',messageId:sent.id}});return NextResponse.json({sent:true,messageId:sent.id},{status:200})}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Email send failed; no confirmed send result.'},{status:502})}}
+import { rateLimitStrict } from '../../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../../src/auth/company-membership';
+import { claimApprovedOutreach, completeApprovedOutreach } from '../../../../src/outreach/approval-execution';
+
+const MAX_BODY_BYTES = 16_384;
+const MAX_SUBJECT_LENGTH = 180;
+const MAX_MESSAGE_LENGTH = 8_000;
+
+export async function POST(request: Request) {
+  const user = await getSupabaseAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: 'Sign in before sending outreach.' }, { status: 401 });
+
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+  }
+
+  let body: unknown;
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: 'Request body is too large.' }, { status: 413 });
+    }
+    body = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
+  }
+
+  const payload = body as Record<string, unknown>;
+  const leadId = typeof payload.leadId === 'string' ? payload.leadId.trim() : '';
+  const approvalId = typeof payload.approvalId === 'string' ? payload.approvalId.trim() : '';
+  const subject = typeof payload.subject === 'string' ? payload.subject.trim() : '';
+  const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+  if (!leadId || !approvalId) {
+    return NextResponse.json({ error: 'leadId and an approved approvalId are required.' }, { status: 400 });
+  }
+  if (!subject || subject.length > MAX_SUBJECT_LENGTH || !text || text.length > MAX_MESSAGE_LENGTH) {
+    return NextResponse.json({ error: 'Provide a subject (up to 180 characters) and message (up to 8,000 characters).' }, { status: 400 });
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const requestedCompanyId = typeof payload.companyId === 'string' ? payload.companyId.trim() : undefined;
+  const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
+  if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
+  if (!membership) return NextResponse.json({ error: 'Company membership required.' }, { status: 403 });
+
+  // A client-side approval flag is not approval. Verify the persisted,
+  // owner/admin-approved request and bind it to this exact lead, recipient and copy.
+  const { data: approval, error: approvalError } = await supabase
+    .from('approval_requests').select('id,payload,decided_by')
+    .eq('id', approvalId).eq('company_id', membership.company_id)
+    .eq('action_type', 'outbound_email').eq('status', 'approved').maybeSingle();
+  if (approvalError) return NextResponse.json({ error: 'Could not verify approval.' }, { status: 503 });
+  if (!approval?.decided_by || !approval.payload || typeof approval.payload !== 'object' || Array.isArray(approval.payload)) {
+    return NextResponse.json({ error: 'A matching owner/admin-approved outreach request is required.' }, { status: 403 });
+  }
+  const { data: approver, error: approverError } = await supabase
+    .from('company_memberships').select('role').eq('company_id', membership.company_id)
+    .eq('user_id', approval.decided_by).eq('status', 'active').maybeSingle();
+  if (approverError) return NextResponse.json({ error: 'Could not verify the approver.' }, { status: 503 });
+  if (!approver || !['owner', 'admin'].includes(approver.role)) {
+    return NextResponse.json({ error: 'The approval must be decided by an active company owner or admin.' }, { status: 403 });
+  }
+
+  const approved = approval.payload as Record<string, unknown>;
+  if (
+    approved.leadId !== leadId ||
+    approved.subject !== subject ||
+    approved.text !== text ||
+    approved.consentConfirmed !== true
+  ) {
+    return NextResponse.json({ error: 'The approved lead, message and consent confirmation must match exactly.' }, { status: 409 });
+  }
+
+  const { data: lead, error: leadError } = await supabase
+    .from('leads').select('id,business_id,businesses(name,email,phone)')
+    .eq('id', leadId).eq('company_id', membership.company_id).maybeSingle();
+  if (leadError) return NextResponse.json({ error: 'Could not verify the lead.' }, { status: 503 });
+  if (!lead) return NextResponse.json({ error: 'Lead not found in this company.' }, { status: 404 });
+
+  const related = lead.businesses as unknown as { name?: string; email?: string | null; phone?: string | null } | { name?: string; email?: string | null; phone?: string | null }[] | null;
+  const business = Array.isArray(related) ? related[0] : related;
+  const email = business?.email?.trim().toLowerCase();
+  if (!email || approved.to !== email) {
+    return NextResponse.json({ error: 'The approved recipient must match the lead email address.' }, { status: 409 });
+  }
+
+  const provider = configuredEmailProvider();
+  if (!provider) {
+    return NextResponse.json({ error: 'Email sending is not configured. No message was sent.' }, { status: 503 });
+  }
+
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceUrl || !serviceKey) {
+    return NextResponse.json({ error: 'Secure outreach execution is not configured.' }, { status: 503 });
+  }
+  const serviceClient = createClient(serviceUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  let claimed = false;
+  try {
+    claimed = await claimApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, { leadId, recipient: email, subject, text });
+  } catch {
+    return NextResponse.json({ error: 'Could not securely claim this approval. No email was sent.' }, { status: 503 });
+  }
+  if (!claimed) {
+    return NextResponse.json({ error: 'This approval is already being processed or has already been used.' }, { status: 409 });
+  }
+
+  const dailyRate = await rateLimitStrict('rate:outreach:' + membership.company_id + ':' + user.id, 10, 86_400);
+  if (!dailyRate.allowed) {
+    await completeApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, false).catch(() => false);
+    return NextResponse.json({ error: 'Outreach is temporarily unavailable or the daily sending limit has been reached.' }, { status: 429 });
+  }
+
+  let sent: { id: string };
+  try {
+    sent = await provider.send(
+      { to: email, subject, text },
+      { idempotencyKey: 'leadpilot-outreach-' + approvalId },
+    );
+  } catch {
+    await completeApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, false).catch(() => false);
+    return NextResponse.json({ error: 'Email delivery could not be confirmed. The approval is available for a safe retry.' }, { status: 502 });
+  }
+
+  try {
+    const completed = await completeApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, true);
+    if (!completed) {
+      return NextResponse.json({ error: 'The provider accepted the email, but the approval state could not be finalized. Retry safely using the same approval.' }, { status: 502 });
+    }
+  } catch {
+    // Keep the execution lease in place. A retry uses the same Resend idempotency
+    // key, preventing a duplicate while the database state is reconciled.
+    return NextResponse.json({ error: 'The provider accepted the email, but its approval record could not be finalized. Retry safely later.' }, { status: 502 });
+  }
+
+  await getAgentMemoryBus().appendEvent({
+    accountId: membership.company_id,
+    leadId,
+    agent: 'outreach',
+    type: 'outreach.sent',
+    payload: { provider: 'resend', messageId: sent.id, approvalId },
+  }).catch(() => undefined);
+  return NextResponse.json({ sent: true, messageId: sent.id }, { status: 200 });
+}
