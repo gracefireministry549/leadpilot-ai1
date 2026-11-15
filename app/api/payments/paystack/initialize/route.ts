@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAuthenticatedUser, createSupabaseServerClient } from '../../../../../src/auth/supabase-server';
 import { rateLimit } from '../../../../../src/cache/redis';
+import { isSupportedPaystackCurrency, toPaystackMinorUnits } from '../../../../../src/agents/offer-link';
 
 const MAX_BODY_BYTES = 16_384;
 
@@ -30,8 +31,9 @@ export async function POST(request: Request) {
   const leadId = typeof input.leadId === 'string' ? input.leadId.trim() : '';
   const agentId = typeof input.agentId === 'string' ? input.agentId.trim().slice(0, 120) : null;
   const offer = typeof input.offer === 'string' ? input.offer.trim().slice(0, 160) : null;
-  if (!email || !/^\S+@\S+\.\S+$/.test(email) || !Number.isFinite(amount) || amount <= 0 || amount > 100_000_000 || !/^[A-Z]{3}$/.test(currency)) {
-    return NextResponse.json({ error: 'A valid customer email, amount and three-letter currency are required.' }, { status: 400 });
+  const amountMinor = toPaystackMinorUnits(amount, currency);
+  if (!email || !/^\S+@\S+\.\S+$/.test(email) || amount > 100_000_000 || !amountMinor || !isSupportedPaystackCurrency(currency)) {
+    return NextResponse.json({ error: 'A valid customer email, amount and supported Paystack currency are required.' }, { status: 400 });
   }
 
   const supabase = await createSupabaseServerClient();
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
       headers: { Authorization: 'Bearer ' + secret, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
-        amount: Math.round(amount * 100),
+        amount: amountMinor,
         currency,
         reference,
         callback_url: origin + '/offer/success?reference=' + encodeURIComponent(reference),
