@@ -116,3 +116,28 @@ export async function hashKey(...parts: string[]): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(digest)).slice(0, 12).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
+
+
+/**
+ * Strict limiter for external side effects such as email delivery.
+ * It requires shared Redis and fails closed when Redis is unavailable.
+ */
+export async function rateLimitStrict(
+  key: string,
+  limit: number,
+  windowSeconds: number,
+  env: Env = process.env,
+  fetchImpl: FetchLike = fetch,
+): Promise<RateLimitResult> {
+  if (!redisConfig(env)) return { allowed: false, remaining: 0, backend: 'memory' };
+  try {
+    const count = Number(await command(env, fetchImpl, ['INCR', key]));
+    if (!Number.isFinite(count) || count < 1) {
+      return { allowed: false, remaining: 0, backend: 'redis' };
+    }
+    if (count === 1) await command(env, fetchImpl, ['EXPIRE', key, windowSeconds]);
+    return { allowed: count <= limit, remaining: Math.max(0, limit - count), backend: 'redis' };
+  } catch {
+    return { allowed: false, remaining: 0, backend: 'redis' };
+  }
+}
