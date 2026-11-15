@@ -1,6 +1,7 @@
 'use server';
 import {redirect} from 'next/navigation';
 import {createSupabaseServerClient} from '../../src/auth/supabase-server';
+import {toCurrencyMinorUnits} from '../../src/agents/offer-link';
 
 const defaultEmployees=[
  ['company_manager','Company Manager','Coordinates priorities, delegates tasks and summarises company progress.'],
@@ -70,8 +71,9 @@ export async function decideApproval(form:FormData){
 export async function addFinanceEntry(form:FormData){
  const {supabase,user,companyId}=await context();
  const entry_type=String(form.get('entry_type')??''),description=String(form.get('description')??'').trim(),amount=Number(form.get('amount')??0),currency=String(form.get('currency')??'NGN').toUpperCase();
- if(!['revenue','expense'].includes(entry_type)||!description||!Number.isFinite(amount)||amount<=0||amount>100000000000||!/^[A-Z]{3}$/.test(currency))redirect('/workspace/finance?error=Enter%20a%20valid%20entry');
- const {error}=await supabase.from('financial_entries').insert({company_id:companyId,created_by:user.id,entry_type,status:'unverified',amount_minor:Math.round(amount*100),currency,description});
+ const amountMinor=toCurrencyMinorUnits(amount,currency);
+ if(!['revenue','expense'].includes(entry_type)||!description||amount>100000000000||!amountMinor)redirect('/workspace/finance?error=Enter%20a%20valid%20entry%20and%20supported%20currency');
+ const {error}=await supabase.from('financial_entries').insert({company_id:companyId,created_by:user.id,entry_type,status:'unverified',amount_minor:amountMinor,currency,description});
  if(error)back('/workspace/finance','Could not save the entry. Try again.');
  await logEvent(supabase,companyId,user.id,'finance_entry_added',`A ${entry_type} entry was recorded as unverified.`);
  redirect('/workspace/finance');
