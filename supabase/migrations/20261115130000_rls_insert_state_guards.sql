@@ -39,3 +39,11 @@ create policy "activity company insert as self"
     private.has_company_role(company_id, array['owner','admin','member'])
     and (actor_id is null or actor_id = (select auth.uid()))
   );
+
+drop policy if exists "leads company insert" on public.leads;
+create policy "leads company insert as self"
+  on public.leads for insert to authenticated
+  with check (
+    private.has_company_role(company_id, array['owner','admin','member'])
+    and created_by = (select auth.uid())
+  );
