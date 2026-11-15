@@ -60,6 +60,13 @@ export async function POST(request: Request) {
   if (!approval?.decided_by || !approval.payload || typeof approval.payload !== 'object' || Array.isArray(approval.payload)) {
     return NextResponse.json({ error: 'A matching owner/admin-approved outreach request is required.' }, { status: 403 });
   }
+  const { data: approver, error: approverError } = await supabase
+    .from('company_memberships').select('role').eq('company_id', membership.company_id)
+    .eq('user_id', approval.decided_by).eq('status', 'active').maybeSingle();
+  if (approverError) return NextResponse.json({ error: 'Could not verify the approver.' }, { status: 503 });
+  if (!approver || !['owner', 'admin'].includes(approver.role)) {
+    return NextResponse.json({ error: 'The approval must be decided by an active company owner or admin.' }, { status: 403 });
+  }
 
   const approved = approval.payload as Record<string, unknown>;
   if (
