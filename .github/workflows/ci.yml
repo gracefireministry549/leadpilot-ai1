@@ -2,7 +2,7 @@ name: LeadPilot CI
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'fix/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -27,8 +27,16 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 20
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Install dependencies without requiring a lockfile
         run: npm install --no-package-lock
+      - name: Validate Python worker
+        working-directory: services/python-agents
+        run: |
+          python -m py_compile service.py general_manager.py general_manager_route.py
+          python -m unittest discover -s . -p 'test_*.py' -v
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
