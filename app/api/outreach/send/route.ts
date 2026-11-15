@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
 import { configuredEmailProvider } from '../../../../src/outreach/email-provider';
 import { getAgentMemoryBus } from '../../../../src/agents/memory-bus';
 import { rateLimitStrict } from '../../../../src/cache/redis';
 import { getActiveCompanyMembership } from '../../../../src/auth/company-membership';
+import { claimApprovedOutreach, completeApprovedOutreach } from '../../../../src/outreach/approval-execution';
 
 const MAX_BODY_BYTES = 16_384;
 const MAX_SUBJECT_LENGTH = 180;
@@ -96,26 +98,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email sending is not configured. No message was sent.' }, { status: 503 });
   }
 
+  const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceUrl || !serviceKey) {
+    return NextResponse.json({ error: 'Secure outreach execution is not configured.' }, { status: 503 });
+  }
+  const serviceClient = createClient(serviceUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  let claimed = false;
+  try {
+    claimed = await claimApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id);
+  } catch {
+    return NextResponse.json({ error: 'Could not securely claim this approval. No email was sent.' }, { status: 503 });
+  }
+  if (!claimed) {
+    return NextResponse.json({ error: 'This approval is already being processed or has already been used.' }, { status: 409 });
+  }
+
   const dailyRate = await rateLimitStrict('rate:outreach:' + membership.company_id + ':' + user.id, 10, 86_400);
   if (!dailyRate.allowed) {
-    return NextResponse.json({ error: 'Outreach is temporarily unavailable or the daily sending limit has been reached.' }, { status: 429 });
-  }
-  const approvalRate = await rateLimitStrict('rate:outreach-approval:' + approvalId, 1, 31_536_000);
-  if (!approvalRate.allowed) {
+    await completeApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, false).catch(() => false);
     return NextResponse.json({ error: 'Outreach is temporarily unavailable or the daily sending limit has been reached.' }, { status: 429 });
   }
 
+  let sent: { id: string };
   try {
-    const sent = await provider.send({ to: email, subject, text });
-    await getAgentMemoryBus().appendEvent({
-      accountId: membership.company_id,
-      leadId,
-      agent: 'outreach',
-      type: 'outreach.sent',
-      payload: { provider: 'resend', messageId: sent.id, approvalId },
-    });
-    return NextResponse.json({ sent: true, messageId: sent.id }, { status: 200 });
+    sent = await provider.send(
+      { to: email, subject, text },
+      { idempotencyKey: 'leadpilot-outreach-' + approvalId },
+    );
   } catch {
-    return NextResponse.json({ error: 'Email delivery could not be confirmed. Check provider status before retrying.' }, { status: 502 });
+    await completeApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, false).catch(() => false);
+    return NextResponse.json({ error: 'Email delivery could not be confirmed. The approval is available for a safe retry.' }, { status: 502 });
   }
+
+  try {
+    const completed = await completeApprovedOutreach(serviceClient, approvalId, membership.company_id, user.id, true);
+    if (!completed) {
+      return NextResponse.json({ error: 'The provider accepted the email, but the approval state could not be finalized. Retry safely using the same approval.' }, { status: 502 });
+    }
+  } catch {
+    // Keep the execution lease in place. A retry uses the same Resend idempotency
+    // key, preventing a duplicate while the database state is reconciled.
+    return NextResponse.json({ error: 'The provider accepted the email, but its approval record could not be finalized. Retry safely later.' }, { status: 502 });
+  }
+
+  await getAgentMemoryBus().appendEvent({
+    accountId: membership.company_id,
+    leadId,
+    agent: 'outreach',
+    type: 'outreach.sent',
+    payload: { provider: 'resend', messageId: sent.id, approvalId },
+  }).catch(() => undefined);
+  return NextResponse.json({ sent: true, messageId: sent.id }, { status: 200 });
 }
