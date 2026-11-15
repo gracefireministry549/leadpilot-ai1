@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export const dynamic = 'force-dynamic';
 
 type Props = { searchParams: Promise<{ reference?: string }> };
@@ -42,7 +44,7 @@ export default async function OfferSuccessPage({ searchParams }: Props) {
         <p style={{ color: '#9bb0bf', lineHeight: 1.6 }}>{description}</p>
         {amount ? <p style={{ fontSize: 22, fontWeight: 800 }}>{amount}</p> : null}
         <p style={{ color: '#7890a2', fontSize: 12, overflowWrap: 'anywhere' }}>Reference: {reference || 'Not provided'}</p>
-        <a href="/" style={{ display: 'inline-block', marginTop: 18, color: '#7ee7c4' }}>Return to LeadPilot</a>
+        <Link href="/" style={{ display: 'inline-block', marginTop: 18, color: '#7ee7c4' }}>Return to LeadPilot</Link>
       </section>
     </main>
   );
