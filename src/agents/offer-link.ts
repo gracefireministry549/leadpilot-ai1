@@ -20,9 +20,11 @@ export function isSupportedPaystackCurrency(currency: string): boolean {
 export function toPaystackMinorUnits(amount: number, currency: string): number | null {
   const normalizedCurrency = currency.trim().toUpperCase();
   const fractionDigits = PAYSTACK_CURRENCY_MINOR_UNITS[normalizedCurrency];
-  if (!Number.isSafeInteger(amount) || amount <= 0 || fractionDigits === undefined) return null;
-  const minorAmount = amount * (10 ** fractionDigits);
-  return Number.isSafeInteger(minorAmount) ? minorAmount : null;
+  if (!Number.isFinite(amount) || amount <= 0 || fractionDigits === undefined) return null;
+  const scaledAmount = amount * (10 ** fractionDigits);
+  const minorAmount = Math.round(scaledAmount);
+  if (!Number.isSafeInteger(minorAmount) || Math.abs(scaledAmount - minorAmount) > 1e-7) return null;
+  return minorAmount;
 }
 
 function secret(){ const value=process.env.OFFER_LINK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY; if(!value) throw new Error('OFFER_LINK_SECRET is not configured.'); return value; }
