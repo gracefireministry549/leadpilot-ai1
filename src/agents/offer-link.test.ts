@@ -8,6 +8,7 @@ test('converts a NGN offer amount from naira to kobo', () => {
 
 test('converts supported two-decimal currencies to minor units', () => {
   assert.equal(toPaystackMinorUnits(125, 'USD'), 12_500);
+  assert.equal(toPaystackMinorUnits(12.5, 'USD'), 1_250);
   assert.equal(toPaystackMinorUnits(75, 'GHS'), 7_500);
   assert.equal(toPaystackMinorUnits(80, 'KES'), 8_000);
 });
@@ -20,6 +21,6 @@ test('rejects unsupported currencies and unsafe amounts', () => {
   assert.equal(isSupportedPaystackCurrency('JPY'), false);
   assert.equal(toPaystackMinorUnits(10, 'JPY'), null);
   assert.equal(toPaystackMinorUnits(0, 'NGN'), null);
-  assert.equal(toPaystackMinorUnits(1.25, 'NGN'), null);
+  assert.equal(toPaystackMinorUnits(1.001, 'NGN'), null);
   assert.equal(toPaystackMinorUnits(Number.MAX_SAFE_INTEGER, 'NGN'), null);
 });
