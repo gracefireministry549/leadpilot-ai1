@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fromPaystackMinorUnits, isSupportedPaystackCurrency, toPaystackMinorUnits } from './offer-link';
+import { fromPaystackMinorUnits, isSupportedPaystackCurrency, toCurrencyMinorUnits, toPaystackMinorUnits } from './offer-link';
 
 test('converts a NGN offer amount from naira to kobo', () => {
   assert.equal(toPaystackMinorUnits(5_000, 'NGN'), 500_000);
@@ -31,4 +31,12 @@ test('converts provider minor units back to major units by currency', () => {
   assert.equal(fromPaystackMinorUnits(1_250, 'USD'), 12.5);
   assert.equal(fromPaystackMinorUnits(5_000, 'XOF'), 5_000);
   assert.equal(fromPaystackMinorUnits(10, 'JPY'), null);
+});
+
+
+test('financial entry amounts use only supported currency precision', () => {
+  assert.equal(toCurrencyMinorUnits(125.5, 'GBP'), 12_550);
+  assert.equal(toCurrencyMinorUnits(100, 'EUR'), 10_000);
+  assert.equal(toCurrencyMinorUnits(1.001, 'NGN'), null);
+  assert.equal(toCurrencyMinorUnits(10, 'JPY'), null);
 });
