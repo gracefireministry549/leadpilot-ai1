@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
-import { createOfferToken } from '../../../../src/agents/offer-link';
+import { createOfferToken, isSupportedPaystackCurrency } from '../../../../src/agents/offer-link';
 
 const MAX_BODY_BYTES = 16_384;
 
@@ -26,8 +26,8 @@ export async function POST(request: Request) {
   const offer = typeof input.offer === 'string' ? input.offer.trim().slice(0, 160) : '';
   const amount = Number(input.amount);
   const currency = typeof input.currency === 'string' ? input.currency.trim().toUpperCase() : 'NGN';
-  if (!leadId || !offer || !Number.isInteger(amount) || amount <= 0 || amount > 100_000_000 || !/^[A-Z]{3}$/.test(currency)) {
-    return NextResponse.json({ error: 'Provide a valid lead, offer, positive amount and three-letter currency.' }, { status: 400 });
+  if (!leadId || !offer || !Number.isSafeInteger(amount) || amount <= 0 || amount > 100_000_000 || !isSupportedPaystackCurrency(currency)) {
+    return NextResponse.json({ error: 'Provide a valid lead, offer, positive whole-unit amount and supported Paystack currency (NGN, USD, GHS, ZAR, KES or XOF).' }, { status: 400 });
   }
 
   const supabase = await createSupabaseServerClient();
