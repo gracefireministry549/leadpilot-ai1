@@ -20,7 +20,10 @@ export async function GET(request: Request) {
   const query = params.get('query')?.trim() || '';
   if (!query) return NextResponse.json({ error: 'Add a business or task description in ?query=' }, { status: 400 });
   if (query.length > 2_000) return NextResponse.json({ error: 'Query must be no longer than 2,000 characters.' }, { status: 400 });
-  const location = params.get('location')?.slice(0, 120) || undefined;\n  const rawLimit = Number(params.get('limit') || 20);\n  const limit = Number.isFinite(rawLimit) ? Math.min(25, Math.max(1, Math.floor(rawLimit))) : 20;\n  return NextResponse.json(await runWorkPilot({ agent: 'workpilot', query, location, limit }));
+  const location = params.get('location')?.slice(0, 120) || undefined;
+  const rawLimit = Number(params.get('limit') || 20);
+  const limit = Number.isFinite(rawLimit) ? Math.min(25, Math.max(1, Math.floor(rawLimit))) : 20;
+  return NextResponse.json(await runWorkPilot({ agent: 'workpilot', query, location, limit }));
 }
 
 export async function POST(request: Request) {
@@ -41,5 +44,8 @@ export async function POST(request: Request) {
   const query = typeof input.query === 'string' ? input.query.trim() : '';
   if (!query) return NextResponse.json({ error: 'Enter what you want the agent to find.' }, { status: 400 });
   if (query.length > 2_000) return NextResponse.json({ error: 'Query must be no longer than 2,000 characters.' }, { status: 400 });
-  const location = typeof input.location === 'string' ? input.location.slice(0, 120) : undefined;\n  const rawLimit = typeof input.limit === 'number' && Number.isFinite(input.limit) ? Math.floor(input.limit) : 20;\n  const limit = Math.min(25, Math.max(1, rawLimit));\n  return NextResponse.json(await runWorkPilot({ agent: 'workpilot', query, location, limit }));
+  const location = typeof input.location === 'string' ? input.location.slice(0, 120) : undefined;
+  const rawLimit = typeof input.limit === 'number' && Number.isFinite(input.limit) ? Math.floor(input.limit) : 20;
+  const limit = Math.min(25, Math.max(1, rawLimit));
+  return NextResponse.json(await runWorkPilot({ agent: 'workpilot', query, location, limit }));
 }
