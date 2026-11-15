@@ -6,9 +6,13 @@ function db(){const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.e
 function validSignature(raw:string,signature:string,secret:string){const expected=crypto.createHmac('sha512',secret).update(raw).digest('hex');try{return crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature));}catch{return false}}
 
 export async function POST(request:Request){
- const raw=await request.text();const signature=request.headers.get('x-paystack-signature')||'';const secret=process.env.PAYSTACK_SECRET_KEY||'';
+ const contentLength=Number(request.headers.get('content-length')||0);
+ if(contentLength>1_000_000)return NextResponse.json({error:'Webhook body is too large.'},{status:413});
+ const raw=await request.text();
+ if(new TextEncoder().encode(raw).byteLength>1_000_000)return NextResponse.json({error:'Webhook body is too large.'},{status:413});const signature=request.headers.get('x-paystack-signature')||'';const secret=process.env.PAYSTACK_SECRET_KEY||'';
  if(!secret||!signature||!validSignature(raw,signature,secret))return NextResponse.json({error:'Invalid webhook signature.'},{status:401});
  let payload:any;try{payload=JSON.parse(raw)}catch{return NextResponse.json({error:'Invalid JSON.'},{status:400})}
+ if(!payload||typeof payload!=='object'||Array.isArray(payload))return NextResponse.json({error:'Invalid webhook payload.'},{status:400});
  if(payload.event!=='charge.success')return NextResponse.json({received:true});
  const data=payload.data||{};const reference=String(data.reference||'');const providerId=String(data.id||'');if(!reference)return NextResponse.json({error:'Missing transaction reference.'},{status:400});
  const supabase=db();
