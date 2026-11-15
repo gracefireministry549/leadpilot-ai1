@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { fromPaystackMinorUnits } from '../../../src/agents/offer-link';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +19,10 @@ export default async function OfferSuccessPage({ searchParams }: Props) {
       const result = await response.json().catch(() => ({}));
       if (response.ok && result?.status && result?.data?.status === 'success') {
         status = 'confirmed';
-        const value = Number(result.data.amount);
+        const amountMinor = Number(result.data.amount);
         const currency = typeof result.data.currency === 'string' ? result.data.currency : '';
-        if (Number.isFinite(value) && value > 0 && currency) amount = currency + ' ' + (value / 100).toLocaleString();
+        const value = fromPaystackMinorUnits(amountMinor, currency);
+        if (value !== null) amount = currency + ' ' + value.toLocaleString();
       } else if (response.ok) {
         status = 'pending';
       }
