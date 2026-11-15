@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
-type OfferLinkPayload = { leadId: string; agentId?: string; offer: string; amount: number; currency: string; exp: number };
+type OfferLinkPayload = { leadId: string; userId?: string; agentId?: string; offer: string; amount: number; currency: string; exp: number };
 function secret(){ const value=process.env.OFFER_LINK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY; if(!value) throw new Error('OFFER_LINK_SECRET is not configured.'); return value; }
 function sign(value:string){ return createHmac('sha256', secret()).update(value).digest('base64url'); }
 export function createOfferToken(input: Omit<OfferLinkPayload,'exp'>, ttlSeconds=604800){ const payload={...input,exp:Math.floor(Date.now()/1000)+ttlSeconds}; const body=Buffer.from(JSON.stringify(payload)).toString('base64url'); return `${body}.${sign(body)}`; }
