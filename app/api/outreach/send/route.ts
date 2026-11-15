@@ -89,11 +89,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email sending is not configured. No message was sent.' }, { status: 503 });
   }
 
-  const [dailyRate, approvalRate] = await Promise.all([
-    rateLimitStrict('rate:outreach:' + membership.company_id + ':' + user.id, 10, 86_400),
-    rateLimitStrict('rate:outreach-approval:' + approvalId, 1, 31_536_000),
-  ]);
-  if (!dailyRate.allowed || !approvalRate.allowed) {
+  const dailyRate = await rateLimitStrict('rate:outreach:' + membership.company_id + ':' + user.id, 10, 86_400);
+  if (!dailyRate.allowed) {
+    return NextResponse.json({ error: 'Outreach is temporarily unavailable or the daily sending limit has been reached.' }, { status: 429 });
+  }
+  const approvalRate = await rateLimitStrict('rate:outreach-approval:' + approvalId, 1, 31_536_000);
+  if (!approvalRate.allowed) {
     return NextResponse.json({ error: 'Outreach is temporarily unavailable or the daily sending limit has been reached.' }, { status: 429 });
   }
 
