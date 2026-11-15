@@ -54,10 +54,23 @@ export async function POST(request: NextRequest) {
     text,
     createdAt: new Date().toISOString(),
   };
-  const context = Array.isArray(input.context)
-    ? input.context.slice(0, MAX_CONTEXT_MESSAGES).filter((item): item is CommunicationMessage =>
-        Boolean(item) && typeof item === 'object' && typeof (item as Record<string, unknown>).text === 'string'
-      )
+  const context: CommunicationMessage[] = Array.isArray(input.context)
+    ? input.context.slice(0, MAX_CONTEXT_MESSAGES).flatMap((item): CommunicationMessage[] => {
+        if (!item || typeof item !== 'object') return [];
+        const entry = item as Record<string, unknown>;
+        if (typeof entry.text !== 'string' || !entry.text.trim()) return [];
+        const channel = entry.channel === 'telegram' || entry.channel === 'whatsapp' ? entry.channel : 'web';
+        const direction = entry.direction === 'outbound' ? 'outbound' : 'inbound';
+        return [{
+          id: typeof entry.id === 'string' ? entry.id.slice(0, 100) : crypto.randomUUID(),
+          channel,
+          conversationId: typeof entry.conversationId === 'string' ? entry.conversationId.slice(0, 120) : message.conversationId,
+          direction,
+          text: entry.text.trim().slice(0, MAX_TEXT_LENGTH),
+          createdAt: typeof entry.createdAt === 'string' ? entry.createdAt.slice(0, 40) : new Date().toISOString(),
+          requiresApproval: entry.requiresApproval === true,
+        }];
+      })
     : [];
   return NextResponse.json(decideClientReply(message, context));
 }
