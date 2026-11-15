@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifyOfferToken } from '../../../../src/agents/offer-link';
+import { isSupportedPaystackCurrency, toPaystackMinorUnits, verifyOfferToken } from '../../../../src/agents/offer-link';
 
 const MAX_BODY_BYTES = 16_384;
 function clean(value: unknown, max = 300) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
@@ -36,11 +36,12 @@ export async function POST(request: Request) {
   // Never trust amount, currency, owner, lead or agent values supplied by the browser.
   const amount = Number(verified.amount);
   const currency = clean(verified.currency, 3).toUpperCase();
+  const amountMinor = toPaystackMinorUnits(amount, currency);
   const offer = clean(verified.offer, 160);
   const leadId = clean(verified.leadId, 120);
   const agentId = clean(verified.agentId, 120);
   const userId = clean(verified.userId, 36);
-  if (!Number.isInteger(amount) || amount <= 0 || !/^[A-Z]{3}$/.test(currency) || !leadId || !userId) {
+  if (!amountMinor || !isSupportedPaystackCurrency(currency) || !leadId || !userId) {
     return NextResponse.json({ error: 'This offer has invalid payment details. Request a new link.' }, { status: 400 });
   }
 
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
       headers: { Authorization: 'Bearer ' + secret, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
-        amount: String(amount),
+        amount: String(amountMinor),
         currency,
         reference,
         callback_url: origin + '/offer/success?reference=' + encodeURIComponent(reference),
