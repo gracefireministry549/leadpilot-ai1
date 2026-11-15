@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '../../../src/auth/supabase-server';
+import { getActiveCompanyMembership } from '../../../src/auth/company-membership';
 import { averageScore, isVerifiedLead, leadTier } from '../../../src/workspace/dashboard-data';
 
 type BusinessRef = { name?: string | null; city?: string | null; country?: string | null; website?: string | null; industry?: string | null };
@@ -13,7 +14,7 @@ export default async function LeadIntelligence(props: { searchParams: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: membership } = await supabase.from('company_memberships').select('company_id').eq('user_id', user.id).eq('status', 'active').limit(1).maybeSingle();
+  const { data: membership } = await getActiveCompanyMembership(supabase, user.id);
   if (!membership?.company_id) redirect('/workspace/setup');
 
   const { data, error } = await supabase
