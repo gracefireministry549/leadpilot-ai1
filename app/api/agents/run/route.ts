@@ -29,6 +29,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'A valid JSON request body is required.' }, { status: 400 });
   }
 
+  const payload = body as Record<string, unknown>;
+
   const supabase = await createSupabaseServerClient();
   const { data: membership, error: membershipError } = await supabase
     .from('company_memberships').select('company_id,role').eq('user_id', user.id)
