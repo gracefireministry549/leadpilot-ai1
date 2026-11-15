@@ -4,6 +4,7 @@ import type { CommunicationMessage } from '../../../../src/communications/types'
 import { isChannel, normalizeCommunicationContext } from '../../../../src/communications/request-validation';
 import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
 import { rateLimit } from '../../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../../src/auth/company-membership';
 
 const MAX_BODY_BYTES = 16_384;
 const MAX_TEXT_LENGTH = 4_000;
@@ -35,9 +36,8 @@ export async function POST(request: NextRequest) {
   if (text.length > MAX_TEXT_LENGTH) return NextResponse.json({ error: 'text must be no longer than 4,000 characters.' }, { status: 400 });
 
   const supabase = await createSupabaseServerClient();
-  const { data: membership, error: membershipError } = await supabase
-    .from('company_memberships').select('company_id').eq('user_id', user.id)
-    .eq('status', 'active').limit(1).maybeSingle();
+  const requestedCompanyId = typeof input.companyId === 'string' ? input.companyId.trim() : undefined;
+  const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
   if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
   if (!membership) return NextResponse.json({ error: 'Company membership required.' }, { status: 403 });
 
