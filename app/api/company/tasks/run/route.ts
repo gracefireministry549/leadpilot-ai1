@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '../../../../../src/auth/supabase-server';
 import { runAgentWithBrain } from '../../../../../src/agents/brain';
 import { rateLimit } from '../../../../../src/cache/redis';
+import { getActiveCompanyMembership } from '../../../../../src/auth/company-membership';
 
 const MAX_BODY_BYTES = 16_384;
 
@@ -41,7 +42,8 @@ export async function POST(request: Request) {
   let instructions = typeof body.instructions === 'string' ? body.instructions.trim().slice(0, 8_000) : '';
   const employeeRole = typeof body.employeeRole === 'string' ? body.employeeRole.slice(0, 80) : '';
 
-  const { data: membership, error: membershipError } = await supabase.from('company_memberships').select('company_id,role').eq('user_id', user.id).eq('status', 'active').limit(1).maybeSingle();
+  const requestedCompanyId = typeof body.companyId === 'string' ? body.companyId.trim() : undefined;
+  const { data: membership, error: membershipError } = await getActiveCompanyMembership(supabase, user.id, requestedCompanyId);
   if (membershipError) return NextResponse.json({ error: 'Could not verify company access.' }, { status: 503 });
   if (!membership) return NextResponse.json({ error: 'Company membership required.' }, { status: 403 });
   if (!RUNNER_ROLES.includes(membership.role)) return NextResponse.json({ error: 'Your role is read-only and cannot run tasks.' }, { status: 403 });
