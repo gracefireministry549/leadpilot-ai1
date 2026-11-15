@@ -28,6 +28,7 @@ begin
     and a.action_type = 'outbound_email'
     and a.status = 'approved'
     and a.executed_at is null
+    and (a.expires_at is null or a.expires_at > now())
     and a.payload ->> 'leadId' = target_lead_id
     and lower(a.payload ->> 'to') = lower(target_recipient)
     and a.payload ->> 'subject' = target_subject
