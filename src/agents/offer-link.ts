@@ -27,6 +27,12 @@ export function toPaystackMinorUnits(amount: number, currency: string): number |
   return minorAmount;
 }
 
+export function fromPaystackMinorUnits(amountMinor: number, currency: string): number | null {
+  const fractionDigits = PAYSTACK_CURRENCY_MINOR_UNITS[currency.trim().toUpperCase()];
+  if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || fractionDigits === undefined) return null;
+  return amountMinor / (10 ** fractionDigits);
+}
+
 function secret(){ const value=process.env.OFFER_LINK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY; if(!value) throw new Error('OFFER_LINK_SECRET is not configured.'); return value; }
 function sign(value:string){ return createHmac('sha256', secret()).update(value).digest('base64url'); }
 export function createOfferToken(input: Omit<OfferLinkPayload,'exp'>, ttlSeconds=604800){ const payload={...input,exp:Math.floor(Date.now()/1000)+ttlSeconds}; const body=Buffer.from(JSON.stringify(payload)).toString('base64url'); return `${body}.${sign(body)}`; }
