@@ -6,6 +6,7 @@ import { interpretLeadQuery } from './lead-query';
 
 type GeneralManagerResult = { status: number; body: any };
 const PYTHON_AGENT_URL = process.env.PYTHON_AGENT_URL?.replace(/\/$/, '');
+const PYTHON_AGENT_SECRET = process.env.PYTHON_AGENT_SECRET;
 const ROUTES: Record<string, string> = { lead: 'lead-finder', leads: 'lead-finder', leadfinder: 'lead-finder', trend: 'trend-finder', trends: 'trend-finder', opportunity: 'opportunity-finder', opportunities: 'opportunity-finder', tender: 'tender-finder', tenders: 'tender-finder', ecommerce: 'ecommerce-opportunity', shop: 'ecommerce-opportunity', work: 'workpilot', content: 'content', website: 'website-brand', brand: 'website-brand', competitor: 'competitor-monitor', outreach: 'outreach', 'gbp-audit': 'gbp-audit', 'gbp-outreach': 'gbp-outreach', 'gbp-fix': 'gbp-fix' };
 
 function chooseAgents(query: string): string[] {
@@ -36,9 +37,15 @@ function localSynthesis(query: string, agents: string[], findings: any[]) {
 }
 
 async function synthesize(input: AgentRunInput, agents: string[], findings: unknown[]): Promise<GeneralManagerResult> {
-  if (!PYTHON_AGENT_URL) return { status: 200, body: localSynthesis(input.query, agents, findings) };
+  // The optional Python worker is trusted only when the shared service secret is configured.
+  if (!PYTHON_AGENT_URL || !PYTHON_AGENT_SECRET) return { status: 200, body: localSynthesis(input.query, agents, findings) };
   try {
-    const response = await fetch(`${PYTHON_AGENT_URL}/v1/agents/general-manager`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: input.query, location: input.location, city: input.city, country: input.country, industry: input.industry, limit: input.limit ?? 25, agents, findings }), signal: AbortSignal.timeout(30000) });
+    const response = await fetch(`${PYTHON_AGENT_URL}/v1/agents/general-manager`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-LeadPilot-Worker-Secret': PYTHON_AGENT_SECRET },
+      body: JSON.stringify({ query: input.query, location: input.location, city: input.city, country: input.country, industry: input.industry, limit: input.limit ?? 25, agents, findings }),
+      signal: AbortSignal.timeout(30_000),
+    });
     const data = await response.json().catch(() => ({}));
     if (response.ok) return { status: response.status, body: data };
   } catch { /* The deterministic control-plane summary remains available. */ }
