@@ -5,13 +5,20 @@ type OfferLinkPayload = { leadId: string; userId?: string; agentId?: string; off
 // Keep this list aligned with the currencies supported by the Paystack checkout integration.
 // XOF has no minor unit; the other supported currencies use two decimal places.
 export const PAYSTACK_CURRENCY_MINOR_UNITS: Readonly<Record<string, number>> = {
-  NGN: 2,
-  USD: 2,
-  GHS: 2,
-  ZAR: 2,
-  KES: 2,
-  XOF: 0,
+  NGN: 2, USD: 2, GHS: 2, ZAR: 2, KES: 2, XOF: 0,
 };
+
+export const FINANCIAL_CURRENCY_MINOR_UNITS: Readonly<Record<string, number>> = {
+  NGN: 2, USD: 2, GBP: 2, EUR: 2,
+};
+
+export function toCurrencyMinorUnits(amount: number, currency: string): number | null {
+  const digits = FINANCIAL_CURRENCY_MINOR_UNITS[currency.trim().toUpperCase()];
+  if (!Number.isFinite(amount) || amount <= 0 || digits === undefined) return null;
+  const scaled = amount * (10 ** digits);
+  const minor = Math.round(scaled);
+  return Number.isSafeInteger(minor) && Math.abs(scaled - minor) <= 1e-7 ? minor : null;
+}
 
 export function isSupportedPaystackCurrency(currency: string): boolean {
   return PAYSTACK_CURRENCY_MINOR_UNITS[currency.trim().toUpperCase()] !== undefined;
