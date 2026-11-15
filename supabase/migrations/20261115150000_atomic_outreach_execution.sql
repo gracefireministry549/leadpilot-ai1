@@ -6,7 +6,11 @@ alter table public.approval_requests
 create or replace function public.claim_approved_outreach(
   target_approval_id uuid,
   target_company_id uuid,
-  target_actor_id uuid
+  target_actor_id uuid,
+  target_lead_id text,
+  target_recipient text,
+  target_subject text,
+  target_message text
 )
 returns boolean
 language plpgsql
@@ -24,6 +28,11 @@ begin
     and a.action_type = 'outbound_email'
     and a.status = 'approved'
     and a.executed_at is null
+    and a.payload ->> 'leadId' = target_lead_id
+    and lower(a.payload ->> 'to') = lower(target_recipient)
+    and a.payload ->> 'subject' = target_subject
+    and a.payload ->> 'text' = target_message
+    and a.payload ->> 'consentConfirmed' = 'true'
     and (
       a.execution_claimed_at is null
       or a.execution_claimed_at < now() - interval '23 hours'
@@ -78,7 +87,7 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_approved_outreach(uuid,uuid,uuid) from public, anon, authenticated;
+revoke all on function public.claim_approved_outreach(uuid,uuid,uuid,text,text,text,text) from public, anon, authenticated;
 revoke all on function public.complete_approved_outreach(uuid,uuid,uuid,boolean) from public, anon, authenticated;
-grant execute on function public.claim_approved_outreach(uuid,uuid,uuid) to service_role;
+grant execute on function public.claim_approved_outreach(uuid,uuid,uuid,text,text,text,text) to service_role;
 grant execute on function public.complete_approved_outreach(uuid,uuid,uuid,boolean) to service_role;
