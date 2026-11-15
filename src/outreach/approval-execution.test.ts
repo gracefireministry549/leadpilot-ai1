@@ -39,5 +39,5 @@ test('failed provider delivery releases the claim for retry', async () => {
 
 test('RPC failures fail closed', async () => {
   const client: ApprovalExecutionRpcClient = { async rpc() { return { data: null, error: new Error('db down') }; } };
-  await assert.rejects(() => claimApprovedOutreach(client, 'approval-1', 'company-1', 'actor-1'));
+  await assert.rejects(() => claimApprovedOutreach(client, 'approval-1', 'company-1', 'actor-1', { leadId: 'lead-1', recipient: 'lead@example.com', subject: 'Approved subject', text: 'Approved copy' }));
 });
