@@ -7,7 +7,6 @@ import { rateLimit } from '../../../../src/cache/redis';
 
 const MAX_BODY_BYTES = 16_384;
 const MAX_TEXT_LENGTH = 4_000;
-const MAX_CONTEXT_MESSAGES = 20;
 
 export async function POST(request: NextRequest) {
   const user = await getSupabaseAuthenticatedUser(request);
