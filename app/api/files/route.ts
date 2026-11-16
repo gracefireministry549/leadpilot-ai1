@@ -3,7 +3,6 @@ import { createSupabaseServerClient } from '../../../src/auth/supabase-server';
 import { ALLOWED_FILE_TYPES, FILE_BUCKET, MAX_FILE_BYTES, sanitizeFileName } from '../../../src/storage/file-policy';
 import { getFileStorageProvider } from '../../../src/storage/file-provider';
 
-export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
