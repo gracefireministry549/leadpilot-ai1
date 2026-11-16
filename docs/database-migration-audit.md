@@ -37,11 +37,11 @@ This indicates the newer company-based set is intended to establish the base sch
 ## Recommended migration strategy
 
 1. Do not replay `001`–`010` ahead of the company foundation.
-2. Treat the company foundation and its subsequent hardening/compatibility migrations as the candidate fresh-install path.
-3. Verify every dependency in the application code and every later migration before declaring that path canonical.
-4. Resolve the duplicate legacy `004` prefix without erasing the migration history needed by any existing environments.
-5. Keep the file-storage migration last in the fresh-install sequence.
-6. Apply the reconciled sequence first to a disposable Supabase project, then validate tables, foreign keys, grants, RLS policies, triggers, and application integration before production cutover.
+2. The candidate fresh-install chain is the timestamped company foundation and its later hardening/compatibility migrations, followed by the file-storage and file-index migrations. The exact ordered list is enforced in CI by applying these migrations to a disposable PostgreSQL database.
+3. The legacy `001`–`010` files are not part of that candidate chain. The two `004` files share a version prefix, so a generic `supabase db push` across the current directory is not yet a safe migration mechanism.
+4. Do not rename or delete legacy migrations until migration history from every previously deployed environment has been reconciled; changing filenames can make already-applied versions appear missing or new.
+5. The CI fresh-install test verifies expected tables, RLS enablement, private bucket configuration, file index, auth profile trigger, and privileged RPC grants. It is a PostgreSQL contract test, not a full Supabase Auth/Storage service emulator.
+6. Before production cutover, run the same chain on a disposable Supabase project/branch and validate the real Auth, Storage, API, and app flows. Do not apply the chain to the current project until its deployment target and migration history are explicitly confirmed.
 
 ## Changes made during this audit
 
@@ -49,6 +49,7 @@ This indicates the newer company-based set is intended to establish the base sch
 - Applied that additive index migration to the inspected Supabase project.
 - No application tables were dropped or rewritten.
 - No legacy migration was deleted or replayed.
+- Added a disposable-Postgres fresh-install test for the complete timestamped company-based chain; it is being run in GitHub Actions.
 - No production deployment or database cutover was performed.
 
 ## Deployment blocker
@@ -58,4 +59,6 @@ The post-merge Cloudflare workflow reached typecheck and tests successfully (82 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-The Cloudflare deploy step was skipped. A successful pull-request dry-run is not evidence of a production deployment.
+The Cloudflare Worker `leadpilot-ai` was inspected through the connected Cloudflare account and currently has no secret bindings. The application uses `SUPABASE_SERVICE_ROLE_KEY` in server-only revenue, outreach, and Paystack webhook paths. The deployment workflow now requires this GitHub secret and passes it to Wrangler using a short-lived, permission-restricted secrets file during deployment. It also validates `CLOUDFLARE_ACCOUNT_ID`. The public Supabase URL and publishable key remain required build inputs.
+
+Cloudflare's documented `wrangler deploy --secrets-file` path is used to attach the runtime secret without committing it. See [Cloudflare Worker secrets documentation](https://developers.cloudflare.com/workers/configuration/secrets/). The deploy remains blocked until the required GitHub repository secrets exist.
