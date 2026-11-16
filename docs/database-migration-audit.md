@@ -43,6 +43,10 @@ This indicates the newer company-based set is intended to establish the base sch
 5. The CI fresh-install test verifies expected tables, RLS enablement, private bucket configuration, file index, auth profile trigger, and privileged RPC grants. It is a PostgreSQL contract test, not a full Supabase Auth/Storage service emulator.
 6. Before production cutover, run the same chain on a disposable Supabase project/branch and validate the real Auth, Storage, API, and app flows. Do not apply the chain to the current project until its deployment target and migration history are explicitly confirmed.
 
+## File storage provider status
+
+Supabase Storage is the only active provider. The connected Cloudflare account's R2 bucket API currently returns error 10042 (R2 must first be enabled in the Cloudflare Dashboard). Therefore the second S3-compatible provider is intentionally disabled: this implementation is hybrid-ready, but it is not yet dual-provider storage or automatic failover. No R2 bucket or R2 credentials were created, and no paid fallback is enabled.
+
 ## Changes made during this audit
 
 - Added `file_objects_user_created_idx` on `(user_id, created_at desc)`, which supports the per-user newest-first listing query and also covers the `user_id` foreign-key lookup.
