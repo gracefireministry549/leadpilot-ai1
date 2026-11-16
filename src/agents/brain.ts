@@ -39,7 +39,7 @@ async function writeBrief(query: string, evidence: ReturnType<typeof buildEviden
   if (!evidence.length) return { brief: deterministicBrief(query, evidence), model: null, llmErrors: [] };
   const outcome = await llmComplete({
     json: true,
-    maxTokens: 700,
+    maxTokens: 1500,
     temperature: 0.1,
     cacheTtlSeconds: RESULT_CACHE_SECONDS,
     cacheNamespace: companyId,
