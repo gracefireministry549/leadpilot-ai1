@@ -33,18 +33,14 @@ jobs:
       - name: Validate production Supabase configuration
         if: github.event_name != 'pull_request'
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          test -n "$NEXT_PUBLIC_SUPABASE_URL" || (echo "Missing NEXT_PUBLIC_SUPABASE_URL repository secret" && exit 1)
-          test -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY repository secret" && exit 1)
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || (echo "Missing SUPABASE_SERVICE_ROLE_KEY repository secret" && exit 1)
       - name: Build for Cloudflare Workers
-        # Pull requests use placeholders; production builds require the new project's secrets above.
+        # These are public Supabase client values and match .env.example; they are not secrets.
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ci_placeholder' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://crkwzloblmdvqzckwhdm.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_vt8fkKjx24J74tjZdhP9Sg_f-7EdQQ7' }}
         run: npm run cf:build
       - name: Bundle the Worker into a single deployable file
         run: npx wrangler deploy --dry-run --outdir cf-bundle
