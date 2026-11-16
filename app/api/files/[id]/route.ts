@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '../../../../src/auth/supabase-server';
 import { getFileStorageProvider } from '../../../../src/storage/file-provider';
 
-export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
