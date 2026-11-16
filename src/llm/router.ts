@@ -33,9 +33,9 @@ type ProviderConfig = { id: LlmProviderId; key: string; model: string };
 
 const DEFAULT_ORDER: LlmProviderId[] = ['groq', 'gemini', 'openrouter', 'xai'];
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
-  groq: 'llama-3.3-70b-versatile',
-  gemini: 'gemini-2.5-flash',
-  openrouter: 'meta-llama/llama-3.3-70b-instruct:free',
+  groq: 'openai/gpt-oss-120b',
+  gemini: 'gemini-flash-latest',
+  openrouter: 'nvidia/nemotron-3-ultra-550b-a55b:free',
   xai: 'grok-4-fast',
 };
 const KEY_VARS: Record<LlmProviderId, string> = { groq: 'GROQ_API_KEY', gemini: 'GEMINI_API_KEY', openrouter: 'OPENROUTER_API_KEY', xai: 'XAI_API_KEY' };
@@ -77,7 +77,7 @@ async function callOpenAiCompatible(provider: ProviderConfig, request: LlmReques
       model: provider.model,
       messages: request.messages,
       temperature: request.temperature ?? 0.2,
-      max_tokens: request.maxTokens ?? 900,
+      max_tokens: request.maxTokens ?? 1500,
       ...(request.json ? { response_format: { type: 'json_object' } } : {}),
     }),
     signal: AbortSignal.timeout(25000),
@@ -102,7 +102,7 @@ async function callGemini(provider: ProviderConfig, request: LlmRequest, fetchIm
       contents,
       generationConfig: {
         temperature: request.temperature ?? 0.2,
-        maxOutputTokens: request.maxTokens ?? 900,
+        maxOutputTokens: request.maxTokens ?? 1500,
         ...(request.json ? { responseMimeType: 'application/json' } : {}),
       },
     }),
