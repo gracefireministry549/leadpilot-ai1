@@ -2,7 +2,7 @@ name: LeadPilot CI
 
 on:
   push:
-    branches: [main, 'codex/**', 'fix/**']
+    branches: [main, 'codex/**', 'fix/**', 'feat/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
