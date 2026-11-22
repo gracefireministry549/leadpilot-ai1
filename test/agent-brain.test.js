@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { configuredLlmProviders, llmComplete, parseJsonObject } from '../src/llm/router.ts';
-import { cacheGet, cacheSet, rateLimit, cacheBackend } from '../src/cache/redis.ts';
+import { cacheGet, cacheSet, rateLimit, cacheBackend, activeCacheBackend } from '../src/cache/redis.ts';
 import { buildEvidence, deterministicBrief, filterRealResults, groundBrief, groundText, isRealUrl } from '../src/agents/grounding.ts';
 import { formatMemoryForPrompt, rememberMemory } from '../src/memory/agent-memory.ts';
 
@@ -117,4 +117,32 @@ test('memory: findings without a source are rejected before any database call', 
 test('memory prompt text labels sources and handles empty memory', () => {
   assert.equal(formatMemoryForPrompt([]), 'REMEMBERED NOTES: none.');
   assert.match(formatMemoryForPrompt([{ id: '1', kind: 'finding', content: 'Acme is large', source_url: 'https://a.io', importance: 3, created_at: '' }]), /\[source: https:\/\/a\.io\]/);
+});
+
+function fakeKv() {
+  const store = new Map();
+  return {
+    store,
+    async get(key) { const e = store.get(key); return e && (!e.exp || e.exp * 1000 > Date.now()) ? e.value : null; },
+    async put(key, value, options = {}) { store.set(key, { value, exp: options.expiration ?? (options.expirationTtl ? Date.now() / 1000 + options.expirationTtl : 0), ttl: options.expirationTtl }); },
+    async delete(key) { store.delete(key); },
+  };
+}
+
+test('Cloudflare KV is used when bound, enforces its 60 second TTL floor, and beats memory', async () => {
+  const CACHE = fakeKv();
+  assert.equal(await activeCacheBackend({ CACHE }), 'kv');
+  assert.equal(await activeCacheBackend({}), 'memory');
+  await cacheSet('kv:k', 'v', 10, { CACHE });
+  assert.equal(await cacheGet('kv:k', { CACHE }), 'v');
+  assert.equal(CACHE.store.get('kv:k').ttl, 60);
+});
+
+test('KV rate limiting counts within a fixed window and fails open on errors', async () => {
+  const CACHE = fakeKv();
+  const results = [];
+  for (let i = 0; i < 3; i += 1) results.push((await rateLimit('rl:kv', 2, 3600, { CACHE })).allowed);
+  assert.deepEqual(results, [true, true, false]);
+  const broken = { get: async () => { throw new Error('down'); }, put: async () => {}, delete: async () => {} };
+  assert.equal((await rateLimit('rl:kv2', 1, 60, { CACHE: broken })).allowed, true);
 });

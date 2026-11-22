@@ -6,7 +6,7 @@
  *   -> remember sourced findings -> cache
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { cacheBackend, cacheGet, cacheSet, hashKey, rateLimit } from '../cache/redis';
+import { activeCacheBackend, cacheGet, cacheSet, hashKey, rateLimit } from '../cache/redis';
 import { llmComplete, parseJsonObject } from '../llm/router';
 import { formatMemoryForPrompt, getOrCreateSession, recallMemories, rememberMemory } from '../memory/agent-memory';
 import { buildEvidence, deterministicBrief, evidenceBlock, filterRealResults, GROUNDING_RULES, groundBrief, type GroundedBrief } from './grounding';
@@ -104,7 +104,7 @@ export async function runAgentWithBrain(input: BrainInput): Promise<BrainOutcome
     else payload.message = brief.summary;
   }
 
-  payload.engine = { model, llmErrors, cache: cacheBackend(), memoriesRecalled: memories.length, sessionId };
+  payload.engine = { model, llmErrors, cache: await activeCacheBackend(), memoriesRecalled: memories.length, sessionId };
 
   // Remember only what has a source behind it.
   const saves: Array<Promise<boolean>> = [];

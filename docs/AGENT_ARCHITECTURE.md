@@ -31,6 +31,9 @@ Set these as Cloudflare Worker secrets (not in the repo). See `.env.example` for
 | Gemini (free tier) | `GEMINI_API_KEY` | aistudio.google.com |
 | OpenRouter | `OPENROUTER_API_KEY` | openrouter.ai |
 | xAI Grok (paid) | `XAI_API_KEY` | console.x.ai |
-| Redis | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | console.upstash.com |
+| Redis (optional) | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | console.upstash.com |
 
-At least one model key is needed for written briefs. Redis is optional; without it the cache and rate limit are per-instance only.
+At least one model key is needed for written briefs.
+
+## Cache backend
+The Worker is bound to a Cloudflare KV namespace named `CACHE` (see `wrangler.jsonc`), so caching and rate limiting are shared across instances with no extra account. KV is eventually consistent, so its per-user limit is approximate. Add the two Upstash variables to switch to Redis, which counts exactly. Without either, an in-memory fallback is used (not shared).
