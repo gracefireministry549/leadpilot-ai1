@@ -1,14 +1,39 @@
 /**
- * Cache and rate limiting for agents.
- *
- * Uses Upstash Redis over its REST API, which works from Cloudflare Workers (no TCP sockets).
- * Without UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN it falls back to a per-instance
- * in-memory map, which is fine for development but is NOT shared between Worker instances.
+ * Cache and rate limiting for agents. Backends, in order of preference:
+ *   1. Upstash Redis (REST API; set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN)
+ *   2. Cloudflare KV, through a Worker binding named CACHE (shared across instances, no extra account)
+ *   3. A per-instance in-memory map (development only; NOT shared between Worker instances)
+ * KV is eventually consistent, so its rate limiting is approximate; Redis is exact.
  */
 type Env = Record<string, string | undefined>;
 type FetchLike = typeof fetch;
 
-export type CacheBackend = 'redis' | 'memory';
+export type CacheBackend = 'redis' | 'kv' | 'memory';
+
+type KvLike = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number; expiration?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+};
+
+/** Finds the Cloudflare KV binding named CACHE. Returns null outside Workers or when not bound. */
+async function resolveKv(env: Env): Promise<KvLike | null> {
+  const injected = (env as { CACHE?: unknown }).CACHE;
+  if (injected && typeof (injected as KvLike).get === 'function') return injected as KvLike;
+  try {
+    const { getCloudflareContext } = await import('@opennextjs/cloudflare');
+    const binding = (getCloudflareContext().env as { CACHE?: unknown }).CACHE;
+    return binding && typeof (binding as KvLike).get === 'function' ? (binding as KvLike) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The backend that will actually be used right now. */
+export async function activeCacheBackend(env: Env = process.env): Promise<CacheBackend> {
+  if (redisConfig(env)) return 'redis';
+  return (await resolveKv(env)) ? 'kv' : 'memory';
+}
 
 const memory = new Map<string, { value: string; expiresAt: number }>();
 
@@ -50,6 +75,14 @@ export async function cacheGet(key: string, env: Env = process.env, fetchImpl: F
       return null; // a cache outage must never break an agent run
     }
   }
+  const kv = await resolveKv(env);
+  if (kv) {
+    try {
+      return await kv.get(key);
+    } catch {
+      return null;
+    }
+  }
   const entry = memory.get(key);
   if (!entry) return null;
   if (entry.expiresAt <= Date.now()) {
@@ -69,6 +102,15 @@ export async function cacheSet(key: string, value: string, ttlSeconds: number, e
     }
     return;
   }
+  const kv = await resolveKv(env);
+  if (kv) {
+    try {
+      await kv.put(key, value, { expirationTtl: Math.max(60, ttl) }); // KV requires a TTL of at least 60 seconds
+    } catch {
+      /* best effort */
+    }
+    return;
+  }
   const now = Date.now();
   sweep(now);
   memory.set(key, { value, expiresAt: now + ttl * 1000 });
@@ -78,6 +120,15 @@ export async function cacheDelete(key: string, env: Env = process.env, fetchImpl
   if (redisConfig(env)) {
     try {
       await command(env, fetchImpl, ['DEL', key]);
+    } catch {
+      /* best effort */
+    }
+    return;
+  }
+  const kv = await resolveKv(env);
+  if (kv) {
+    try {
+      await kv.delete(key);
     } catch {
       /* best effort */
     }
@@ -97,6 +148,24 @@ export async function rateLimit(key: string, limit: number, windowSeconds: numbe
       return { allowed: count <= limit, remaining: Math.max(0, limit - count), backend: 'redis' };
     } catch {
       return { allowed: true, remaining: limit, backend: 'redis' };
+    }
+  }
+  const kv = await resolveKv(env);
+  if (kv) {
+    try {
+      const now = Date.now();
+      const [rawCount, rawReset] = String((await kv.get(key)) ?? '').split('|');
+      let count = Number(rawCount) || 0;
+      let resetAt = Number(rawReset) || 0;
+      if (resetAt <= now) {
+        count = 0;
+        resetAt = now + Math.max(60, windowSeconds) * 1000;
+      }
+      count += 1;
+      await kv.put(key, `${count}|${resetAt}`, { expiration: Math.ceil(resetAt / 1000) });
+      return { allowed: count <= limit, remaining: Math.max(0, limit - count), backend: 'kv' };
+    } catch {
+      return { allowed: true, remaining: limit, backend: 'kv' };
     }
   }
   const now = Date.now();
