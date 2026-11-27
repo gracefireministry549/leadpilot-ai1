@@ -86,7 +86,7 @@ export async function createApprovalRequest(form:FormData){
  let payload:Record<string,unknown>={requestedFrom:'workspace'};
  if(actionType==='outbound_email'){
   const leadId=String(form.get('lead_id')??'').trim(),to=String(form.get('recipient')??'').trim().toLowerCase(),subject=String(form.get('email_subject')??'').trim(),text=String(form.get('email_text')??'').trim(),consentConfirmed=form.get('consent_confirmed')==='on';
-  if(!leadId||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)||!subject||subject.length>180||!text||text.length>8000||!consentConfirmed)redirect('/workspace/approvals?error=Outbound%20email%20approval%20needs%20a%20lead%2C%20valid%20recipient%2C%20message%20and%20consent%20confirmation');
+  if(!leadId||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)||!subject||subject.length>180||!text||text.length>8000||!consentConfirmed)redirect('/workspace/approvals?error=Outbound%20email%20approval%20needs%20a%20lead%2C%20valid%20recipient%2C%20message%20and%20consent%20confirmation');
   const {data:lead,error:leadError}=await supabase.from('leads').select('id,businesses(email)').eq('id',leadId).eq('company_id',companyId).maybeSingle();
   if(leadError||!lead)redirect('/workspace/approvals?error=Lead%20not%20found%20in%20this%20company');
   const related=lead.businesses as unknown as {email?:string|null}|{email?:string|null}[]|null;
