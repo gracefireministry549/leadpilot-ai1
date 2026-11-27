@@ -23,7 +23,9 @@ export async function checkWebsite(value?: string, timeoutMs = 1500): Promise<We
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: controller.signal });
+    // Follow redirects: http→https and bare-domain→www 301/302s are the norm
+    // for real small-business sites and must not be scored as unreachable.
+    const response = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
     return {
       status: response.ok ? 'REACHABLE' : 'UNREACHABLE',
       httpStatus: response.status,

@@ -11,7 +11,11 @@ export async function middleware(request:NextRequest){
  }});
  const {data}=await supabase.auth.getUser();
  const path=request.nextUrl.pathname;
- if((path.startsWith('/workspace')||path.startsWith('/settings')||path.startsWith('/api/company')||path.startsWith('/api/workpilot')||path.startsWith('/api/orchestrate')||path.startsWith('/api/website-brand'))&&!data.user){
+ const protectedPath=path.startsWith('/workspace')||path.startsWith('/settings')||path.startsWith('/api/company')||path.startsWith('/api/workpilot')||path.startsWith('/api/orchestrate')||path.startsWith('/api/website-brand');
+ if(protectedPath&&!data.user){
+  // API callers need JSON, not an HTML login page: fetch() follows the 302 and
+  // then fails parsing the HTML as JSON, hiding the real problem.
+  if(path.startsWith('/api/'))return NextResponse.json({error:'Authentication required. Sign in and try again.'},{status:401});
   const target=request.nextUrl.clone();target.pathname='/login';target.searchParams.set('next',path);return NextResponse.redirect(target);
  }
  response.headers.set('Cache-Control','private, no-store');return response;

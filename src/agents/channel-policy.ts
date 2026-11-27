@@ -12,6 +12,5 @@ export function chooseOutreachChannel(input: ChannelInput): OutreachChannel {
   if (!input.consent && input.email) return 'EMAIL';
   if (input.email) return 'EMAIL';
   if (input.phone && input.consent) return 'WHATSAPP';
-  if (input.phone && input.consent) return 'SMS';
   return 'MANUAL';
 }

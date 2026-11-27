@@ -28,6 +28,12 @@ export interface LeadRecord {
   status: LeadStatus;
   score: number;
   scoreLabel: 'HOT' | 'HIGH' | 'POTENTIAL' | 'LOW';
+  /** Reliability intelligence produced by the finder pipeline. Persisted so
+   * workspace dashboards can show verified-lead KPIs and recommendations. */
+  reliabilityConfidence?: number;
+  reliabilityLevel?: string;
+  websiteStatus?: string;
+  recommendation?: string;
   createdAt: string;
   updatedAt: string;
 }
