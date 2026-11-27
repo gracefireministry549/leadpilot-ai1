@@ -37,18 +37,41 @@ export async function runDueAgentSchedules(limit = 10) {
   const runs: Array<{ id: string; status: 'completed' | 'failed'; resultCount: number }> = [];
 
   for (const schedule of data ?? []) {
-    const result = await runAgent({ accountId: schedule.user_id }, {
-      agent: schedule.agent_id as AgentName, query: schedule.query, location: schedule.location ?? undefined,
-      industry: schedule.industry ?? undefined, limit: schedule.limit_count,
-    });
+    let status: 'completed' | 'failed' = 'completed';
+    let resultCount = 0;
+    try {
+      // Resolve the owner's company so leads persist under the company (a
+      // user id in businesses.company_id would violate the FK constraint).
+      const { data: membership } = await supabase
+        .from('company_memberships')
+        .select('company_id')
+        .eq('user_id', schedule.user_id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const auth = membership?.company_id
+        ? { accountId: membership.company_id as string, userId: schedule.user_id }
+        : { accountId: schedule.user_id as string };
 
-    const body = 'body' in result && result.body && typeof result.body === 'object'
-      ? result.body as { results?: unknown[] }
-      : { results: [] };
-    const resultCount = Array.isArray(body.results) ? body.results.length : 0;
-    const responseStatus = 'status' in result && typeof result.status === 'number' ? result.status : 500;
-    const status: 'completed' | 'failed' = responseStatus >= 200 && responseStatus < 300 ? 'completed' : 'failed';
+      const result = await runAgent(auth, {
+        agent: schedule.agent_id as AgentName, query: schedule.query, location: schedule.location ?? undefined,
+        industry: schedule.industry ?? undefined, limit: schedule.limit_count,
+      });
 
+      const body = 'body' in result && result.body && typeof result.body === 'object'
+        ? result.body as { results?: unknown[] }
+        : { results: [] };
+      resultCount = Array.isArray(body.results) ? body.results.length : 0;
+      const responseStatus = 'status' in result && typeof result.status === 'number' ? result.status : 500;
+      status = responseStatus >= 200 && responseStatus < 300 ? 'completed' : 'failed';
+    } catch {
+      // A throwing agent used to abort the whole batch and leave the failing
+      // schedule due forever, starving every other schedule.
+      status = 'failed';
+    }
+    // Always advance next_run_at, even after a failure, so one bad schedule
+    // cannot retry every tick and block the rest.
     await supabase.from('agent_schedules').update({
       next_run_at: nextRun(now, schedule.frequency as ScheduleFrequency).toISOString(),
       last_run_at: now.toISOString(), last_status: status, last_result_count: resultCount,

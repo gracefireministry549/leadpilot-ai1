@@ -25,8 +25,11 @@ export async function PATCH(request:Request){
  try{
   const current={id:row.id,accountId:row.account_id,businessId:row.business_id,status:row.status,score:row.score,scoreLabel:row.score_label,createdAt:row.created_at,updatedAt:row.updated_at};
   const next=transitionLead(current,to as any);
-  const {error:updateError}=await s.from('leads').update({status:next.status,updated_at:next.updatedAt}).eq('id',leadId).eq('company_id',membership.company_id).eq('status',current.status);
+  const {data:updatedRows,error:updateError}=await s.from('leads').update({status:next.status,updated_at:next.updatedAt}).eq('id',leadId).eq('company_id',membership.company_id).eq('status',current.status).select('id');
   if(updateError)return NextResponse.json({error:'Unable to update lead status.'},{status:409});
+  // Optimistic lock: 0 rows means someone else moved this lead first. Never
+  // report success or record a duplicate 'won' event for a lost race.
+  if(!updatedRows||updatedRows.length===0)return NextResponse.json({error:'This lead was just updated by someone else. Reload and try again.'},{status:409});
   if(current.status!=='CUSTOMER'&&next.status==='CUSTOMER'){try{await recordRevenueEvent(user.id,{leadId,agentId:'crm',event:'won',value:0,currency:'USD',occurredAt:next.updatedAt})}catch{/* CRM state remains valid; this event is attribution, not verified payment. */}}
   return NextResponse.json({lead:next});
  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Invalid transition'},{status:409})}

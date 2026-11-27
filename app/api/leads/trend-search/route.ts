@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { postTrendLeadsSearch } from '../../../../src/api/trend-lead-route';
-import { getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
+import { createSupabaseServerClient, getSupabaseAuthenticatedUser } from '../../../../src/auth/supabase-server';
+import { getActiveCompanyMembership } from '../../../../src/auth/company-membership';
 import { configuredLeadProviders } from '../../../../src/providers/configured-provider';
 import { rateLimit } from '../../../../src/cache/redis';
 
@@ -38,9 +39,17 @@ export async function POST(request: Request) {
     location: typeof input.location === 'string' ? input.location.slice(0, 120) : input.location,
     limit: typeof input.limit === 'number' && Number.isFinite(input.limit) ? Math.min(100, Math.max(1, Math.floor(input.limit))) : input.limit,
   };
+  // Resolve the company (not the user id) so persistence targets the company
+  // workspace and records the user as created_by.
+  let auth: { accountId: string; userId: string } | null = null;
+  if (user) {
+    const supabase = await createSupabaseServerClient();
+    const { data: membership } = await getActiveCompanyMembership(supabase, user.id);
+    if (membership?.company_id) auth = { accountId: membership.company_id, userId: user.id };
+  }
   const result = await postTrendLeadsSearch(
     { method: 'POST', body: safeBody },
-    user ? { accountId: user.id } : null,
+    auth,
     configuredLeadProviders(),
   );
   return NextResponse.json(result.body, { status: result.status });
