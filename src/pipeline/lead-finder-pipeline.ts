@@ -30,7 +30,7 @@ export async function runLeadFinderPipeline(accountId: string, providers: LeadPr
     const researched = await researchLead(business, baseScore);
     const report = await buildReliableLeadReport(business);
     const now = new Date().toISOString();
-    return { business, lead: { id: crypto.randomUUID(), accountId, businessId: business.id, status: 'NEW' as const, score: researched.score.score, scoreLabel: researched.score.label, createdAt: now, updatedAt: now }, report, research: researched.research };
+    return { business, lead: { id: crypto.randomUUID(), accountId, businessId: business.id, status: 'NEW' as const, score: researched.score.score, scoreLabel: researched.score.label, reliabilityConfidence: report.reliability.confidence, reliabilityLevel: report.reliability.level, websiteStatus: report.website.status, recommendation: report.recommendation, createdAt: now, updatedAt: now }, report, research: researched.research };
   }));
   results.sort((a, b) => b.lead.score - a.lead.score);
   return { results, warnings };

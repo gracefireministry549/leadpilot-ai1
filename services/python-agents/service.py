@@ -1,6 +1,7 @@
 """LeadPilot optional Python reasoning workforce."""
 from __future__ import annotations
 
+import hashlib
 import html
 import hmac
 import json
@@ -41,7 +42,12 @@ def fetch_rss(query: str, limit: int = 12):
         for block in re.findall(r"<item[\s\S]*?</item>", raw, re.I)[:limit]:
             def tag(name):
                 match = re.search(rf"<{name}[^>]*>([\s\S]*?)</{name}>", block, re.I)
-                return html.unescape(re.sub(r"<[^>]+>", " ", match.group(1))).replace("<![CDATA[", "").replace("]]>", "").strip() if match else ""
+                if not match:
+                    return ""
+                # Remove CDATA wrappers BEFORE stripping tags: stripping first
+                # also strips the CDATA text itself, losing every description.
+                raw = match.group(1).replace("<![CDATA[", "").replace("]]>", "")
+                return html.unescape(re.sub(r"<[^>]+>", " ", raw)).strip()
 
             item = {"title": tag("title"), "description": tag("description"), "url": tag("link"), "posted": tag("pubDate")}
             if item["title"] and item["url"]:
@@ -128,7 +134,9 @@ def research(payload):
     }[agent]
     items, warnings = fetch_rss(terms, int(payload.get("limit") or 20))
     results = [{
-        "id": f"{agent}-{abs(hash(item['url']))}",
+        # Deterministic id across restarts: Python's hash() is salted per
+        # process, so abs(hash(url)) changes on every restart.
+        "id": f"{agent}-{hashlib.md5(item['url'].encode('utf-8')).hexdigest()[:16]}",
         "title": item["title"],
         "description": item["description"],
         "url": item["url"],
